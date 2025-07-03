@@ -4,53 +4,65 @@ service cloud.firestore {
   match /databases/{database}/documents {
 
     // Work Orders Collection
+    // Each work order document must have a 'userId' field matching the creator's UID.
     match /workOrders/{workOrderId} {
-      // Anyone authenticated can create a work order,
-      // but they must set their own userId.
       allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
-
-      // Only the user who owns the work order can read, update, or delete it.
       allow read, update, delete: if request.auth != null && resource.data.userId == request.auth.uid;
-
-      // Disallow list operations by default unless specifically for the user (see below)
-      // This rule above handles individual document access.
+    }
+    // Allow users to list ONLY their own work orders.
+    // This rule relies on the client-side query containing: where('userId', '==', request.auth.uid)
+    match /workOrders/{document=**} {
+       allow list: if request.auth != null && request.query.resource.data.userId == request.auth.uid;
+       // A more robust list rule might inspect request.query.filters directly,
+       // but this often gets complex. Relying on client queries with proper indexing and
+       // server-side validation (if any sensitive fields were involved beyond userId) is common.
+       // For now, we assume client makes the correct "where userId == uid" query.
+       // If the client tries to list all without this where clause, it might be denied if no broader read rule exists.
+       // Let's refine the list rule to be more explicit about the query:
+       // allow list: if request.auth != null &&
+       //                request.query.filters.find(f => f[0].fieldPath == "userId" && f[1] == "==" && f[2] == request.auth.uid) != null;
+       // This is still complex. A simpler approach for now is to ensure the client does its job.
+       // The current rule for `list` means that if a query is made on `workOrders` collection,
+       // it will be allowed if the query somehow ensures that the resulting documents would have matched `resource.data.userId == request.auth.uid`.
+       // This is usually achieved by client-side `where("userId", "==", request.auth.uid)`.
     }
 
-    // Allow a user to list only their own work orders.
-    // This requires queries to include `where("userId", "==", request.auth.uid)`.
-    // The `listUserWorkOrders` function in `firestoreService.ts` already does this.
-    match /workOrders/{document=**} { // This applies to collection queries
-      allow list: if request.auth != null && request.query.resource.data.userId == request.auth.uid;
-      // A common pattern for list is to check the query:
-      // allow list: if request.auth != null && request.query.filters.find(f => f.fieldPath == "userId" && f.value == request.auth.uid) != null;
-      // However, the above is simpler if all list queries are correctly filtered in client code.
-      // For more robust security on list, you might restrict it further or ensure queries always filter by userId.
-      // For now, this rule is a bit broad for list but relies on client-side query constraints.
-      // A stricter rule for list:
-      // allow list: if request.auth != null &&
-      //                request.query.limit <= 100 && // Optional: limit query size
-      //                (request.query.filters.size() == 0 || // Allow listing all if no filters (careful!)
-      //                 request.query.filters.find(f => f.fieldPath == "userId" && f.op == "==" && f.value == request.auth.uid) != null);
-      // The above is complex. Let's use a simpler one based on client query being correct for `listUserWorkOrders`.
-      // The `listUserWorkOrders` function uses `where("userId", "==", userId)`.
-      // So, for a list operation (getDocs on a query), the security rules need to allow it
-      // if the query is properly constrained.
-      // `resource` is not available in list rules for collection groups.
-      // For collection queries, `resource` is not available.
-      // We must rely on the query being correctly formed by the client.
-      // A common secure pattern for listing user's own documents:
-      // allow list: if request.auth != null && request.auth.uid == request.query.resource.__name__[6]; // This is for specific path structure
-      // This is tricky. A simpler way for /workOrders collection:
-      // allow list: if request.auth != null; // And then rely on client queries with `where("userId", "==", request.auth.uid)`
-      // This means anyone authenticated *could* list all if they bypass client code, but client filters.
-      // For better security, you'd often structure data like /users/{userId}/workOrders/{workOrderId}
-      // For now, let's assume client queries are correct for `list`.
+
+    // Shared Data Collections (publicly readable, admin-only write - admin role not implemented yet)
+    // So effectively read-only for general users for now.
+    match /stoneTypes/{stoneTypeId} {
+      allow read: if true;
+      allow write: if false; // Future: if request.auth.token.admin == true;
+    }
+    match /stoneTypes/{document=**} { // For listing all stone types
+        allow list: if true;
     }
 
-    // Default deny all other paths / collections
-    // match /{document=**} {
-    //   allow read, write: if false;
-    // }
+    match /edgeDefinitions/{edgeDefId} {
+      allow read: if true;
+      allow write: if false;
+    }
+     match /edgeDefinitions/{document=**} {
+        allow list: if true;
+    }
+
+    match /faceDefinitions/{faceDefId} {
+      allow read: if true;
+      allow write: if false;
+    }
+    match /faceDefinitions/{document=**} {
+        allow list: if true;
+    }
+
+    match /palletTypes/{palletTypeId} {
+      allow read: if true;
+      allow write: if false;
+    }
+    match /palletTypes/{document=**} {
+        allow list: if true;
+    }
+
+    // Default deny all other paths / collections unless explicitly allowed.
     // This is implicit if no other rules match.
   }
 }

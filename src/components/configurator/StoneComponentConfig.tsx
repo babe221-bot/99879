@@ -1,7 +1,7 @@
 "use client";
 
 import React from 'react';
-import { StoneType, sampleStoneTypes } from '@/data/sampleData';
+import { StoneType } from '@/types/stoneData'; // Use the main StoneType
 import { AppliedEdgeProcessingConfig, AppliedFaceProcessingConfig } from '@/types/stoneData';
 
 export interface StoneComponentData {
@@ -18,10 +18,11 @@ export interface StoneComponentData {
 
 interface StoneComponentConfigProps {
   component: StoneComponentData;
-  isActive: boolean; // To highlight or indicate this component is driving the 3D/2D views
+  isActive: boolean;
   onUpdate: (updatedComponent: StoneComponentData) => void;
   onRemove: () => void;
-  onSetActive: () => void; // Callback to make this component active for visualization
+  onSetActive: () => void;
+  availableStoneTypes: StoneType[]; // New prop
 }
 
 const StoneComponentConfig: React.FC<StoneComponentConfigProps> = ({
@@ -29,7 +30,8 @@ const StoneComponentConfig: React.FC<StoneComponentConfigProps> = ({
   isActive,
   onUpdate,
   onRemove,
-  onSetActive
+  onSetActive,
+  availableStoneTypes // Destructure new prop
 }) => {
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
@@ -80,7 +82,7 @@ const StoneComponentConfig: React.FC<StoneComponentConfigProps> = ({
             onChange={handleInputChange}
             className="w-full p-1.5 border border-gray-300 rounded dark:bg-gray-700 dark:text-white"
           >
-            {sampleStoneTypes.map(st => (
+            {availableStoneTypes.map(st => (
               <option key={st.id} value={st.id}>{st.name}</option>
             ))}
           </select>
