@@ -1,18 +1,17 @@
 export interface StoneType {
-  id: string; // Firestore document ID
-  name: string; // e.g., "Kirmenjak", "Kanfanar"
+  id: string;
+  name: string;
   description?: string;
-  densityKgM3: number; // kg/m³ e.g., 2650
-  strengthMPa?: number; // e.g., 120
-  priceEURPerM3: number; // Price per cubic meter, e.g., 180
-  pbrTexturePath?: string; // Path to PBR textures, e.g., "/textures/kirmenjak/" or a base name for diffuse, normal etc.
-  // Example: pbrTexturePath = "/textures/kirmenjak/" means diffuse is at /textures/kirmenjak/diffuse.png
-  origin?: string; // e.g., "Istria", "Brač"
+  densityKgM3: number;
+  strengthMPa?: number;
+  priceEURPerM3: number;
+  pbrTexturePath?: string;
+  origin?: string;
 }
 
 export interface EdgeProcessingDefinition {
-  id: string; // Firestore document ID, or a unique key like "CHAMFER_C1"
-  name: string; // e.g., "Obaranje Ivica C1 (1mm)"
+  id: string;
+  name: string;
   type: 'CHAMFER' | 'ROUND' | 'DEBURR';
   parameters: {
     width?: number;
@@ -25,23 +24,16 @@ export interface EdgeProcessingDefinition {
 }
 
 export interface FaceProcessingDefinition {
-  id: string; // Firestore document ID, e.g., "polishing", "martelina_fina"
-  name: string; // e.g., "Poliranje", "Martelina fina"
-  // These paths would point to textures specific to the face processing effect
-  // e.g., a different normal map for martelina, or a roughness map for polishing.
+  id: string;
+  name: string;
   normalMapPath?: string;
   roughnessMapPath?: string;
-  aoMapPath?: string; // Optional, if face processing adds specific AO
-  // Base color/diffuse map usually comes from the stone type itself.
+  aoMapPath?: string;
   priceEURPerM2: number;
   description?: string;
 }
 
-
-// Maps to the ID of an EdgeProcessingDefinition
 export type AppliedEdgeProcessingID = string;
-
-// Configuration for edge processing applied to different groups
 export interface AppliedEdgeProcessingConfig {
   TOP?: AppliedEdgeProcessingID;
   BOTTOM?: AppliedEdgeProcessingID;
@@ -49,19 +41,34 @@ export interface AppliedEdgeProcessingConfig {
   SIDES_LEFT_RIGHT?: AppliedEdgeProcessingID;
 }
 
-// Maps to the ID of a FaceProcessingDefinition
 export type AppliedFaceProcessingID = string;
-
-// For BoxGeometry, faces are typically indexed: 0: +X, 1: -X, 2: +Y, 3: -Y, 4: +Z, 5: -Z
-// We can map these to more readable names.
 export type BoxFaceName = 'RIGHT' | 'LEFT' | 'TOP' | 'BOTTOM' | 'FRONT' | 'BACK';
-
-// Configuration for face processing applied to different faces
 export interface AppliedFaceProcessingConfig {
-  RIGHT?: AppliedFaceProcessingID;  // +X
-  LEFT?: AppliedFaceProcessingID;   // -X
-  TOP?: AppliedFaceProcessingID;    // +Y
-  BOTTOM?: AppliedFaceProcessingID; // -Y
-  FRONT?: AppliedFaceProcessingID;  // +Z
-  BACK?: AppliedFaceProcessingID;   // -Z
+  RIGHT?: AppliedFaceProcessingID;
+  LEFT?: AppliedFaceProcessingID;
+  TOP?: AppliedFaceProcessingID;
+  BOTTOM?: AppliedFaceProcessingID;
+  FRONT?: AppliedFaceProcessingID;
+  BACK?: AppliedFaceProcessingID;
+}
+
+// New Logistics Types
+export interface PalletType {
+  id: string; // e.g., "euro_pallet", "custom_wood_large"
+  name: string; // e.g., "Euro Pallet (1200x800)", "Custom Wood Crate Large"
+  lengthMM: number; // Length in mm
+  widthMM: number;  // Width in mm
+  heightMM?: number; // Optional: height of pallet itself, or max stacking height
+  maxLoadKg: number;
+  material?: 'WOOD' | 'PLASTIC' | 'METAL';
+  type: 'EURO' | 'NON_EURO' | 'CRATE' | 'CUSTOM';
+  notes?: string; // e.g., "Standard disposable", "Heavy duty reusable"
+}
+
+// To be added to WorkOrderData or a separate LogisticsInfo object
+export interface LogisticsInfo {
+  selectedPalletId?: string;
+  packingNotes?: string;
+  // calculatedWeightKg?: number; // Could be stored per component or summed for WO
+  // calculatedFitStatus?: string;
 }

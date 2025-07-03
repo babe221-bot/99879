@@ -32,7 +32,7 @@ interface StoneBlockProps {
   hovered?: boolean;
   edgeProcessingConfig?: AppliedEdgeProcessingConfig;
   faceProcessingConfig?: AppliedFaceProcessingConfig;
-  wireframe?: boolean; // New prop for wireframe mode
+  wireframe?: boolean;
 }
 
 const getEdgeProcessingParams = (id: ProcessingID): EdgeProcessingDefinition | undefined => { return sampleEdgeProcessingDefinitions.find(p => p.id === id); };
@@ -59,7 +59,7 @@ const StoneBlock: React.FC<StoneBlockProps> = ({
 
   const [w, h, d] = size;
 
-  const materials = useMemo(() => {
+  const materials = useMemo(() => { // Unchanged from previous step
     const baseMaterial = new THREE.MeshStandardMaterial({
       map: wireframe ? undefined : baseColorMap,
       normalMap: wireframe ? undefined : baseNormalMap,
@@ -67,26 +67,23 @@ const StoneBlock: React.FC<StoneBlockProps> = ({
       aoMap: wireframe ? undefined : baseAoMap,
       side: THREE.DoubleSide, name: "baseStoneMaterial",
       wireframe: wireframe,
-      color: wireframe ? new THREE.Color("lime") : undefined, // Give wireframe a color
+      color: wireframe ? new THREE.Color("lime") : undefined,
     });
-
     const faceMaterialsArray = [baseMaterial];
     const uniqueFaceProcessingIds = new Set(Object.values(faceProcessingConfig).filter(id => id) as string[]);
-
     uniqueFaceProcessingIds.forEach(processingId => {
       const params = getFaceProcessingParams(processingId);
       if (params) {
         const mat = baseMaterial.clone();
-        mat.name = processingId;
-        mat.wireframe = wireframe;
+        mat.name = processingId; mat.wireframe = wireframe;
         if (params.normalMapPath && !wireframe) {
           console.warn(`Wireframe: Would load normal map: ${params.normalMapPath} for ${processingId}. Preloading needed.`);
           mat.roughness = Math.random();
         } else if (!wireframe) {
            mat.roughness = (baseMaterial.roughness * 0.8 + Math.random() * 0.2) ;
         } else {
-            mat.roughness = 0.5; // for wireframe, roughness might not matter but set it
-            mat.color = new THREE.Color("cyan"); // Different color for processed faces in wireframe
+            mat.roughness = 0.5;
+            mat.color = new THREE.Color("cyan");
         }
         faceMaterialsArray.push(mat);
       }
@@ -122,24 +119,51 @@ const StoneBlock: React.FC<StoneBlockProps> = ({
       return new THREE.ExtrudeGeometry(shape, { depth: length, bevelEnabled: false });
     };
 
+    // Apply TOP Edges Chamfer
     const topProcessingId = edgeProcessingConfig.TOP;
     if (topProcessingId) {
       const params = getEdgeProcessingParams(topProcessingId);
       if (params && params.type === 'CHAMFER' && params.parameters.width) {
-        const chamferSize = params.parameters.width / 10;
-        const edgesToProcess = [
-          { L: w, P: [-w/2, h/2 - chamferSize, d/2], R: [0, Math.PI / 2,  0] },
-          { L: w, P: [w/2, h/2 - chamferSize, -d/2], R: [Math.PI, Math.PI / 2, 0] },
-          { L: d, P: [-w/2, h/2 - chamferSize, -d/2], R: [Math.PI/2, 0, -Math.PI/2] },
-          { L: d, P: [w/2, h/2-chamferSize, d/2], R: [0, 0, -Math.PI/2] },
+        const chamferValue = params.parameters.width / 10; // Ensure this scaling is correct
+        const topEdges = [
+          { L: w, P: [-w/2, h/2 - chamferValue, d/2], R: [0, Math.PI / 2,  0] }, // Front
+          { L: w, P: [w/2, h/2 - chamferValue, -d/2], R: [Math.PI, Math.PI / 2, 0] }, // Back
+          { L: d, P: [-w/2, h/2 - chamferValue, -d/2], R: [Math.PI/2, 0, -Math.PI/2] }, // Left
+          { L: d, P: [w/2, h/2 - chamferValue, d/2], R: [0, 0, -Math.PI/2] }, // Right
         ];
-        edgesToProcess.forEach(edge => {
-          let brushGeom = createChamferBrush(edge.L, chamferSize);
+        topEdges.forEach(edge => {
+          let brushGeom = createChamferBrush(edge.L, chamferValue);
           let brushMesh = new THREE.Mesh(brushGeom);
           brushMesh.rotation.fromArray(edge.R.map(r => r as number) as [number,number,number]);
           brushMesh.position.fromArray(edge.P as [number,number,number]);
           brushMesh.updateMatrixWorld(true);
           csgResult = CSG.subtract(csgResult, CSG.fromMesh(brushMesh));
+        });
+      }
+    }
+
+    // Apply BOTTOM Edges Chamfer
+    const bottomProcessingId = edgeProcessingConfig.BOTTOM;
+    if (bottomProcessingId) {
+      const params = getEdgeProcessingParams(bottomProcessingId);
+      if (params && params.type === 'CHAMFER' && params.parameters.width) {
+        const chamferValue = params.parameters.width / 10;
+        const bottomEdges = [
+            // Positions are relative to the center of the main box (0,0,0 before final centering)
+            // Brush shape points towards +Y, +X from its local origin (0,0)
+            // Need to rotate and position brushes to cut inwards at bottom edges
+            { L: w, P: [-w/2, -h/2 + chamferValue, d/2], R: [0, Math.PI / 2, Math.PI] }, // Front: Rotate brush to point "up" from bottom
+            { L: w, P: [w/2, -h/2 + chamferValue, -d/2], R: [Math.PI, Math.PI/2, Math.PI] }, // Back
+            { L: d, P: [-w/2, -h/2 + chamferValue, -d/2], R: [-Math.PI/2, 0, Math.PI/2] }, // Left
+            { L: d, P: [w/2, -h/2 + chamferValue, d/2], R: [Math.PI, 0, Math.PI/2] }  // Right
+        ];
+        bottomEdges.forEach(edge => {
+            let brushGeom = createChamferBrush(edge.L, chamferValue);
+            let brushMesh = new THREE.Mesh(brushGeom);
+            brushMesh.rotation.fromArray(edge.R.map(r => r as number) as [number,number,number]);
+            brushMesh.position.fromArray(edge.P as [number,number,number]);
+            brushMesh.updateMatrixWorld(true);
+            csgResult = CSG.subtract(csgResult, CSG.fromMesh(brushMesh));
         });
       }
     }
@@ -151,14 +175,9 @@ const StoneBlock: React.FC<StoneBlockProps> = ({
 
   }, [w, h, d, edgeProcessingConfig, materials, faceProcessingConfig]);
 
-  const getEdgeColor = () => {
-    if (wireframe) return '#00cc00'; // Brighter Green wireframe edges
-    if (highlightedFaceGroupVisual !== 'NONE') return '#66f';
-    if (hovered) return 'yellow';
-    return '#777';
-  };
+  const getEdgeColor = () => { /* ... */ return wireframe ? '#00cc00' : (highlightedFaceGroupVisual !== 'NONE' ? '#66f' : (hovered ? 'yellow' : '#777')); };
 
-  const handlePointerDown = (event: ThreeEvent<MouseEvent>) => {
+  const handlePointerDown = (event: ThreeEvent<MouseEvent>) => { /* ... */
     event.stopPropagation();
     if (onBlockClick) {
       const faceNormal = event.face?.normal.clone();
@@ -174,7 +193,7 @@ const StoneBlock: React.FC<StoneBlockProps> = ({
       meshRef.current.geometry = processedGeometry;
       meshRef.current.material = materials;
     }
-  }, [processedGeometry, materials]); // wireframe is already a dep of materials
+  }, [processedGeometry, materials]);
 
   return (
     <mesh
@@ -182,7 +201,7 @@ const StoneBlock: React.FC<StoneBlockProps> = ({
       geometry={processedGeometry}
       onPointerDown={handlePointerDown}
     >
-      {!wireframe && <Edges // Only show Edges component if not in wireframe mode, as material handles it
+      {!wireframe && <Edges
         color={getEdgeColor()}
         linewidth={hovered || highlightedFaceGroupVisual !== 'NONE' ? 2 : 1}
         threshold={15}
@@ -191,7 +210,7 @@ const StoneBlock: React.FC<StoneBlockProps> = ({
   );
 };
 
-interface SceneProps {
+interface SceneProps { /* ... as before ... */
   currentEdgeProcessingConfig: AppliedEdgeProcessingConfig;
   currentFaceProcessingConfig: AppliedFaceProcessingConfig;
   onFaceClickForSelection: (group: HighlightedFaceGroup, faceName?: BoxFaceName) => void;
@@ -211,7 +230,7 @@ const Scene: React.FC<SceneProps> = ({
   const [highlightedGroupVisual, setHighlightedGroupVisual] = useState<HighlightedFaceGroup>('NONE');
   const [isBlockHovered, setIsBlockHovered] = useState<boolean>(false);
 
-  const handleStoneClick = (event: ThreeEvent<MouseEvent>, faceNormal: THREE.Vector3 | null, faceIndex?: number) => {
+  const handleStoneClick = (event: ThreeEvent<MouseEvent>, faceNormal: THREE.Vector3 | null, faceIndex?: number) => { /* ... */
     let group: HighlightedFaceGroup = 'NONE';
     let nameOfFace: BoxFaceName | undefined = undefined;
     if (faceIndex !== undefined && faceIndex >=0 && faceIndex < faceIndexToNameMap.length) {
@@ -228,7 +247,7 @@ const Scene: React.FC<SceneProps> = ({
     onFaceClickForSelection(group, nameOfFace);
   };
 
-  const handleCanvasMiss = () => {
+  const handleCanvasMiss = () => { /* ... */
     setHighlightedGroupVisual('NONE');
     onFaceClickForSelection('NONE');
   };
