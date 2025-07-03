@@ -5,31 +5,40 @@ import { Canvas, useLoader, ThreeEvent } from '@react-three/fiber';
 import { OrbitControls, Grid, Edges } from '@react-three/drei';
 import * as THREE from 'three';
 import { CSG } from 'three-csg-ts';
+import {
+  EdgeProcessingDefinition,
+  FaceProcessingDefinition,
+  sampleEdgeProcessingDefinitions,
+  sampleFaceProcessingDefinitions
+} from '@/data/sampleData';
+import {
+  AppliedEdgeProcessingConfig,
+  AppliedFaceProcessingConfig,
+  BoxFaceName
+} from '@/types/stoneData';
 
-// For highlighting based on click. This can be different from the group selected for processing.
+
 export type HighlightedFaceGroup = 'NONE' | 'TOP' | 'BOTTOM' | 'SIDES_FRONT_BACK' | 'SIDES_LEFT_RIGHT' | 'ALL';
-
-// For applying processing. These string values must match keys in AppliedProcessing.
 export type ProcessableGroup = 'TOP' | 'BOTTOM' | 'SIDES_FRONT_BACK' | 'SIDES_LEFT_RIGHT';
+export type ProcessingID = string;
 
-export type ProcessingType = 'NONE' | 'CHAMFER_C1' | 'ROUND_R1'; // C1 = 0.1 unit chamfer
-
-export interface AppliedProcessingConfig {
-  TOP?: ProcessingType;
-  BOTTOM?: ProcessingType;
-  SIDES_FRONT_BACK?: ProcessingType;
-  SIDES_LEFT_RIGHT?: ProcessingType;
-}
 
 interface StoneBlockProps {
-  position?: [number, number, number]; // This should be the center of the final geometry
-  size?: [number, number, number]; // Initial dimensions before processing
+  position?: [number, number, number];
+  size?: [number, number, number];
   stoneType?: string;
-  onBlockClick?: (event: ThreeEvent<MouseEvent>, faceNormal: THREE.Vector3 | null) => void;
-  highlightedFaceGroupVisual?: HighlightedFaceGroup; // For visual feedback on click
+  onBlockClick?: (event: ThreeEvent<MouseEvent>, faceNormal: THREE.Vector3 | null, faceIndex?: number) => void;
+  highlightedFaceGroupVisual?: HighlightedFaceGroup;
   hovered?: boolean;
-  processingConfig?: AppliedProcessingConfig;
+  edgeProcessingConfig?: AppliedEdgeProcessingConfig;
+  faceProcessingConfig?: AppliedFaceProcessingConfig;
+  wireframe?: boolean; // New prop for wireframe mode
 }
+
+const getEdgeProcessingParams = (id: ProcessingID): EdgeProcessingDefinition | undefined => { return sampleEdgeProcessingDefinitions.find(p => p.id === id); };
+const getFaceProcessingParams = (id: ProcessingID): FaceProcessingDefinition | undefined => { return sampleFaceProcessingDefinitions.find(p => p.id === id);};
+const faceIndexToNameMap: BoxFaceName[] = ['RIGHT', 'LEFT', 'TOP', 'BOTTOM', 'FRONT', 'BACK'];
+
 
 const StoneBlock: React.FC<StoneBlockProps> = ({
   position = [0, 0.75, 0],
@@ -38,92 +47,113 @@ const StoneBlock: React.FC<StoneBlockProps> = ({
   onBlockClick,
   highlightedFaceGroupVisual = 'NONE',
   hovered = false,
-  processingConfig = {},
+  edgeProcessingConfig = {},
+  faceProcessingConfig = {},
+  wireframe = false,
 }) => {
   const texturePath = `/textures/${stoneType}/`;
-  const [colorMap, normalMap, roughnessMap, aoMap] = useLoader(THREE.TextureLoader, [
+  const [baseColorMap, baseNormalMap, baseRoughnessMap, baseAoMap] = useLoader(THREE.TextureLoader, [
     `${texturePath}diffuse.png`, `${texturePath}normal.png`,
-    `${texturePath}roughness.png`, `${texturePath}ao.png`, // Corrected comma
+    `${texturePath}roughness.png`, `${texturePath}ao.png`,
   ]);
-
-  const material = useMemo(() => new THREE.MeshStandardMaterial({
-    map: colorMap, normalMap: normalMap, roughnessMap: roughnessMap, aoMap: aoMap,
-    side: THREE.DoubleSide, // Important for CSG results
-  }), [colorMap, normalMap, roughnessMap, aoMap]);
 
   const [w, h, d] = size;
 
+  const materials = useMemo(() => {
+    const baseMaterial = new THREE.MeshStandardMaterial({
+      map: wireframe ? undefined : baseColorMap,
+      normalMap: wireframe ? undefined : baseNormalMap,
+      roughnessMap: wireframe ? undefined : baseRoughnessMap,
+      aoMap: wireframe ? undefined : baseAoMap,
+      side: THREE.DoubleSide, name: "baseStoneMaterial",
+      wireframe: wireframe,
+      color: wireframe ? new THREE.Color("lime") : undefined, // Give wireframe a color
+    });
+
+    const faceMaterialsArray = [baseMaterial];
+    const uniqueFaceProcessingIds = new Set(Object.values(faceProcessingConfig).filter(id => id) as string[]);
+
+    uniqueFaceProcessingIds.forEach(processingId => {
+      const params = getFaceProcessingParams(processingId);
+      if (params) {
+        const mat = baseMaterial.clone();
+        mat.name = processingId;
+        mat.wireframe = wireframe;
+        if (params.normalMapPath && !wireframe) {
+          console.warn(`Wireframe: Would load normal map: ${params.normalMapPath} for ${processingId}. Preloading needed.`);
+          mat.roughness = Math.random();
+        } else if (!wireframe) {
+           mat.roughness = (baseMaterial.roughness * 0.8 + Math.random() * 0.2) ;
+        } else {
+            mat.roughness = 0.5; // for wireframe, roughness might not matter but set it
+            mat.color = new THREE.Color("cyan"); // Different color for processed faces in wireframe
+        }
+        faceMaterialsArray.push(mat);
+      }
+    });
+    return faceMaterialsArray;
+  }, [baseColorMap, baseNormalMap, baseRoughnessMap, baseAoMap, faceProcessingConfig, stoneType, wireframe]);
+
+
   const processedGeometry = useMemo(() => {
-    console.log("Recalculating geometry with processing:", processingConfig);
-    let baseMesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d));
-    baseMesh.updateMatrixWorld(true); // Ensure world matrix is up-to-date
+    let baseBoxGeom = new THREE.BoxGeometry(w, h, d);
+    for (let i = 0; i < baseBoxGeom.groups.length; i++) {
+        baseBoxGeom.groups[i].materialIndex = 0;
+    }
+    (Object.keys(faceProcessingConfig) as BoxFaceName[]).forEach(faceName => {
+      const processingId = faceProcessingConfig[faceName];
+      if (processingId) {
+        const materialIndexInArray = materials.findIndex(m => m.name === processingId);
+        const faceIdx = faceIndexToNameMap.indexOf(faceName);
+        if (faceIdx !== -1 && materialIndexInArray !== -1 && baseBoxGeom.groups[faceIdx]) {
+             baseBoxGeom.groups[faceIdx].materialIndex = materialIndexInArray > 0 ? materialIndexInArray : 0;
+        }
+      }
+    });
+    baseBoxGeom.groupsNeedUpdate = true;
 
-    const chamferSize = 0.1; // For CHAMFER_C1
-
-    // Helper to create a chamfer brush for an edge along a given axis
-    const createChamferBrush = (length: number, chamfer: number) => {
-      const shape = new THREE.Shape();
-      shape.moveTo(0, 0);
-      shape.lineTo(chamfer, 0);
-      shape.lineTo(0, chamfer);
-      shape.closePath();
-      const extrudeSettings = { depth: length, bevelEnabled: false };
-      return new THREE.ExtrudeGeometry(shape, extrudeSettings);
-    };
-
+    let baseMesh = new THREE.Mesh(baseBoxGeom);
+    baseMesh.updateMatrixWorld(true);
     let csgResult: CSG = CSG.fromMesh(baseMesh);
 
-    // TOP Edges Chamfer
-    if (processingConfig.TOP === 'CHAMFER_C1') {
-      // Edge 1 (front: +Z, along X axis)
-      let brushGeom1 = createChamferBrush(w, chamferSize); // length along X
-      let brushMesh1 = new THREE.Mesh(brushGeom1, material); // material needed for CSG object
-      brushMesh1.rotation.set(0, Math.PI / 2,  0); // Rotate shape to align
-      brushMesh1.position.set(-w/2, h/2 - chamferSize, d/2); // Top-Front-Left corner start
-      brushMesh1.updateMatrixWorld(true);
-      csgResult = CSG.subtract(csgResult, CSG.fromMesh(brushMesh1));
+    const createChamferBrush = (length: number, chamferVal: number) => {
+      const shape = new THREE.Shape();
+      shape.moveTo(0, 0); shape.lineTo(chamferVal, 0); shape.lineTo(0, chamferVal); shape.closePath();
+      return new THREE.ExtrudeGeometry(shape, { depth: length, bevelEnabled: false });
+    };
 
-      // Edge 2 (back: -Z, along X axis)
-      let brushGeom2 = createChamferBrush(w, chamferSize);
-      let brushMesh2 = new THREE.Mesh(brushGeom2, material);
-      brushMesh2.rotation.set(Math.PI, Math.PI / 2, 0); // Rotate to face inwards and along -X
-      brushMesh2.position.set(w/2, h/2 - chamferSize, -d/2);
-      brushMesh2.updateMatrixWorld(true);
-      csgResult = CSG.subtract(csgResult, CSG.fromMesh(brushMesh2));
-
-      // Edge 3 (left: -X, along Z axis)
-      let brushGeom3 = createChamferBrush(d, chamferSize); // length along Z
-      let brushMesh3 = new THREE.Mesh(brushGeom3, material);
-      brushMesh3.rotation.set(Math.PI/2, 0, -Math.PI/2);
-      brushMesh3.position.set(-w/2, h/2 - chamferSize, -d/2);
-      brushMesh3.updateMatrixWorld(true);
-      csgResult = CSG.subtract(csgResult, CSG.fromMesh(brushMesh3));
-
-      // Edge 4 (right: +X, along Z axis)
-      let brushGeom4 = createChamferBrush(d, chamferSize);
-      let brushMesh4 = new THREE.Mesh(brushGeom4, material);
-      brushMesh4.rotation.set(0, 0, -Math.PI/2);
-      brushMesh4.position.set(w/2, h/2-chamferSize, d/2);
-      brushMesh4.updateMatrixWorld(true);
-      csgResult = CSG.subtract(csgResult, CSG.fromMesh(brushMesh4));
+    const topProcessingId = edgeProcessingConfig.TOP;
+    if (topProcessingId) {
+      const params = getEdgeProcessingParams(topProcessingId);
+      if (params && params.type === 'CHAMFER' && params.parameters.width) {
+        const chamferSize = params.parameters.width / 10;
+        const edgesToProcess = [
+          { L: w, P: [-w/2, h/2 - chamferSize, d/2], R: [0, Math.PI / 2,  0] },
+          { L: w, P: [w/2, h/2 - chamferSize, -d/2], R: [Math.PI, Math.PI / 2, 0] },
+          { L: d, P: [-w/2, h/2 - chamferSize, -d/2], R: [Math.PI/2, 0, -Math.PI/2] },
+          { L: d, P: [w/2, h/2-chamferSize, d/2], R: [0, 0, -Math.PI/2] },
+        ];
+        edgesToProcess.forEach(edge => {
+          let brushGeom = createChamferBrush(edge.L, chamferSize);
+          let brushMesh = new THREE.Mesh(brushGeom);
+          brushMesh.rotation.fromArray(edge.R.map(r => r as number) as [number,number,number]);
+          brushMesh.position.fromArray(edge.P as [number,number,number]);
+          brushMesh.updateMatrixWorld(true);
+          csgResult = CSG.subtract(csgResult, CSG.fromMesh(brushMesh));
+        });
+      }
     }
 
-    // Similar blocks for BOTTOM, SIDES_FRONT_BACK, SIDES_LEFT_RIGHT would go here
-    // if (processingConfig.BOTTOM === 'CHAMFER_C1') { ... }
-
     const finalMesh = CSG.toMesh(csgResult, baseMesh.matrix);
-    finalMesh.material = material; // Re-apply material
     finalMesh.geometry.computeVertexNormals();
-
-    // Center the geometry if CSG operations shifted its origin
     finalMesh.geometry.center();
-
     return finalMesh.geometry;
 
-  }, [w, h, d, processingConfig, material]); // material added as dep
+  }, [w, h, d, edgeProcessingConfig, materials, faceProcessingConfig]);
 
   const getEdgeColor = () => {
-    if (highlightedFaceGroupVisual !== 'NONE') return '#66f'; // Light blue for highlight
+    if (wireframe) return '#00cc00'; // Brighter Green wireframe edges
+    if (highlightedFaceGroupVisual !== 'NONE') return '#66f';
     if (hovered) return 'yellow';
     return '#777';
   };
@@ -132,59 +162,70 @@ const StoneBlock: React.FC<StoneBlockProps> = ({
     event.stopPropagation();
     if (onBlockClick) {
       const faceNormal = event.face?.normal.clone();
-      onBlockClick(event, faceNormal || null);
+      const faceIndex = event.faceIndex;
+      onBlockClick(event, faceNormal || null, faceIndex !== undefined ? Math.floor(faceIndex / 2) : undefined);
     }
   };
 
   const meshRef = useRef<THREE.Mesh>(null!);
-
   useEffect(() => {
     if (meshRef.current) {
       meshRef.current.geometry.dispose();
       meshRef.current.geometry = processedGeometry;
+      meshRef.current.material = materials;
     }
-  }, [processedGeometry]);
-
+  }, [processedGeometry, materials]); // wireframe is already a dep of materials
 
   return (
     <mesh
-      ref={meshRef}
-      position={position} // The component is positioned at its center
-      castShadow
-      receiveShadow
+      ref={meshRef} position={position} castShadow receiveShadow
       geometry={processedGeometry}
-      material={material}
       onPointerDown={handlePointerDown}
     >
-      <Edges
+      {!wireframe && <Edges // Only show Edges component if not in wireframe mode, as material handles it
         color={getEdgeColor()}
         linewidth={hovered || highlightedFaceGroupVisual !== 'NONE' ? 2 : 1}
         threshold={15}
-      />
+      />}
     </mesh>
   );
 };
 
 interface SceneProps {
-  currentProcessingConfig: AppliedProcessingConfig;
-  onFaceClickForSelection: (group: HighlightedFaceGroup) => void;
+  currentEdgeProcessingConfig: AppliedEdgeProcessingConfig;
+  currentFaceProcessingConfig: AppliedFaceProcessingConfig;
+  onFaceClickForSelection: (group: HighlightedFaceGroup, faceName?: BoxFaceName) => void;
+  componentSize: [number, number, number];
+  componentStoneType: string;
+  wireframeMode?: boolean;
 }
 
-const Scene: React.FC<SceneProps> = ({ currentProcessingConfig, onFaceClickForSelection }) => {
+const Scene: React.FC<SceneProps> = ({
+  currentEdgeProcessingConfig,
+  currentFaceProcessingConfig,
+  onFaceClickForSelection,
+  componentSize,
+  componentStoneType,
+  wireframeMode = false,
+}) => {
   const [highlightedGroupVisual, setHighlightedGroupVisual] = useState<HighlightedFaceGroup>('NONE');
   const [isBlockHovered, setIsBlockHovered] = useState<boolean>(false);
 
-  const handleStoneClick = (event: ThreeEvent<MouseEvent>, faceNormal: THREE.Vector3 | null) => {
+  const handleStoneClick = (event: ThreeEvent<MouseEvent>, faceNormal: THREE.Vector3 | null, faceIndex?: number) => {
     let group: HighlightedFaceGroup = 'NONE';
+    let nameOfFace: BoxFaceName | undefined = undefined;
+    if (faceIndex !== undefined && faceIndex >=0 && faceIndex < faceIndexToNameMap.length) {
+        nameOfFace = faceIndexToNameMap[faceIndex];
+    }
     if (faceNormal) {
       if (faceNormal.y > 0.9) group = 'TOP';
       else if (faceNormal.y < -0.9) group = 'BOTTOM';
       else if (Math.abs(faceNormal.z) > 0.9) group = 'SIDES_FRONT_BACK';
       else if (Math.abs(faceNormal.x) > 0.9) group = 'SIDES_LEFT_RIGHT';
-      else group = 'ALL'; // Should not happen often with distinct faces
+      else group = 'ALL';
     }
     setHighlightedGroupVisual(group);
-    onFaceClickForSelection(group); // Inform parent which face group was clicked
+    onFaceClickForSelection(group, nameOfFace);
   };
 
   const handleCanvasMiss = () => {
@@ -192,28 +233,32 @@ const Scene: React.FC<SceneProps> = ({ currentProcessingConfig, onFaceClickForSe
     onFaceClickForSelection('NONE');
   };
 
+  const [width, height, depth] = componentSize;
+
   return (
     <Canvas
-      camera={{ position: [3.5, 3.5, 3.5], fov: 50 }} // slightly adjusted camera
+      camera={{ position: [width*1.5, height*1.5, depth*2.5], fov: 50 }}
       shadows
       onPointerMissed={handleCanvasMiss}
     >
       <ambientLight intensity={0.8} />
-      <directionalLight position={[8, 10, 5]} intensity={1.5} castShadow shadow-mapSize={[2048, 2048]}/>
-      <Grid infiniteGrid cellSize={0.5} sectionSize={2.5} fadeDistance={30} cellColor="#555" sectionColor="#885555" />
+      <directionalLight position={[width*2, height*3, depth*2]} intensity={1.5} castShadow shadow-mapSize={[2048, 2048]}/>
+      <Grid infiniteGrid cellSize={0.5} sectionSize={2.5} fadeDistance={Math.max(width,depth)*5} cellColor="#555" sectionColor="#885555" />
       <Suspense fallback={null}>
         <group
           onPointerOver={(e) => { e.stopPropagation(); setIsBlockHovered(true);}}
           onPointerOut={(e) => { e.stopPropagation(); setIsBlockHovered(false);}}
         >
           <StoneBlock
-            stoneType="kirmenjak" // Example
-            processingConfig={currentProcessingConfig}
+            stoneType={componentStoneType}
+            size={componentSize}
+            position={[0, componentSize[1]/2, 0]}
+            edgeProcessingConfig={currentEdgeProcessingConfig}
+            faceProcessingConfig={currentFaceProcessingConfig}
             onBlockClick={handleStoneClick}
             highlightedFaceGroupVisual={highlightedGroupVisual}
             hovered={isBlockHovered}
-            size={[1.5, 1.5, 1]} // w, h, d - ensure position is adjusted if needed
-            position={[0, 1.5/2, 0]} // center geometry on grid
+            wireframe={wireframeMode}
           />
         </group>
       </Suspense>

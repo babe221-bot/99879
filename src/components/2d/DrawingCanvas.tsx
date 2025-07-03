@@ -3,20 +3,25 @@
 import React, { useEffect, useRef } from 'react';
 import { fabric } from 'fabric';
 
+export type DrawingViewType = 'top' | 'front' | 'side';
+
 interface DrawingCanvasProps {
-  // Dimensions of the stone face to draw
-  stoneWidth: number;
-  stoneHeight: number;
-  // Canvas dimensions (can be larger than stone face to accommodate padding and dimensions)
+  stoneWidth: number;  // Overall W of the 3D block
+  stoneHeight: number; // Overall H of the 3D block
+  stoneDepth: number;  // Overall D of the 3D block
+  viewType: DrawingViewType;
   canvasWidth?: number;
   canvasHeight?: number;
+  // TODO: Add props for chamfer/round details to draw them if possible
 }
 
 const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
   stoneWidth,
   stoneHeight,
+  stoneDepth,
+  viewType,
   canvasWidth = 500,
-  canvasHeight = 400
+  canvasHeight = 350 // Adjusted default height
 }) => {
   const canvasEl = useRef<HTMLCanvasElement>(null);
   const fabricCanvas = useRef<fabric.Canvas | null>(null);
@@ -24,104 +29,116 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
   useEffect(() => {
     if (!canvasEl.current) return;
 
-    // Initialize canvas
     fabricCanvas.current = new fabric.Canvas(canvasEl.current, {
       width: canvasWidth,
       height: canvasHeight,
       backgroundColor: '#f8f8f8',
-      selection: false, // Disable group selection for a static drawing
+      selection: false,
     });
-
     const fc = fabricCanvas.current;
 
-    // Drawing parameters
-    const padding = 50; // Padding around the stone rectangle
+    const padding = 50;
     const strokeColor = '#333';
     const dimensionColor = '#555';
     const dimensionTextSize = 14;
-    const dimensionOffset = 20; // How far the dimension line is from the shape
-    const tickSize = 5; // Size of dimension line ticks
+    const dimensionOffset = 20;
+    const tickSize = 5;
 
-    // Calculate scaled dimensions if stone is too large for canvas (simple fit)
+    let dim1: number, dim2: number; // Dimension 1 (horizontal on canvas), Dimension 2 (vertical on canvas)
+    let dim1Label: string, dim2Label: string;
+
+    switch (viewType) {
+      case 'top': // Tlocrt: Width x Depth
+        dim1 = stoneWidth; dim1Label = `Širina: ${stoneWidth}`; // Horizontal on canvas
+        dim2 = stoneDepth; dim2Label = `Dubina: ${stoneDepth}`; // Vertical on canvas
+        break;
+      case 'front': // Nacrt: Width x Height
+        dim1 = stoneWidth; dim1Label = `Širina: ${stoneWidth}`;
+        dim2 = stoneHeight; dim2Label = `Visina: ${stoneHeight}`;
+        break;
+      case 'side': // Side view: Depth x Height
+        dim1 = stoneDepth; dim1Label = `Dubina: ${stoneDepth}`;
+        dim2 = stoneHeight; dim2Label = `Visina: ${stoneHeight}`;
+        break;
+      default:
+        return; // Should not happen
+    }
+
     const availableWidth = canvasWidth - 2 * padding - 2 * dimensionOffset;
     const availableHeight = canvasHeight - 2 * padding - 2 * dimensionOffset;
 
-    let drawWidth = stoneWidth;
-    let drawHeight = stoneHeight;
-    let scale = 1;
-
-    if (stoneWidth > availableWidth || stoneHeight > availableHeight) {
-      scale = Math.min(availableWidth / stoneWidth, availableHeight / stoneHeight);
-      drawWidth = stoneWidth * scale;
-      drawHeight = stoneHeight * scale;
+    let drawDim1 = dim1;
+    let drawDim2 = dim2;
+    if (dim1 > availableWidth || dim2 > availableHeight) {
+      const scale = Math.min(availableWidth / dim1, availableHeight / dim2);
+      drawDim1 = dim1 * scale;
+      drawDim2 = dim2 * scale;
     }
 
     const rectLeft = padding + dimensionOffset;
     const rectTop = padding + dimensionOffset;
 
-    // Stone Rectangle
     const rect = new fabric.Rect({
-      left: rectLeft,
-      top: rectTop,
-      width: drawWidth,
-      height: drawHeight,
-      fill: '#e0e0e0',
-      stroke: strokeColor,
-      strokeWidth: 1,
-      selectable: false,
-      evented: false,
+      left: rectLeft, top: rectTop, width: drawDim1, height: drawDim2,
+      fill: '#e0e0e0', stroke: strokeColor, strokeWidth: 1,
+      selectable: false, evented: false,
     });
     fc.add(rect);
 
-    // Dimension: Width
-    const dimLineWidth = [
-      new fabric.Line([rectLeft, rectTop + drawHeight + dimensionOffset, rectLeft + drawWidth, rectTop + drawHeight + dimensionOffset], { stroke: dimensionColor, strokeWidth: 1, selectable: false, evented: false }), // Main line
-      new fabric.Line([rectLeft, rectTop + drawHeight + dimensionOffset - tickSize, rectLeft, rectTop + drawHeight + dimensionOffset + tickSize], { stroke: dimensionColor, strokeWidth: 1, selectable: false, evented: false }), // Left tick
-      new fabric.Line([rectLeft + drawWidth, rectTop + drawHeight + dimensionOffset - tickSize, rectLeft + drawWidth, rectTop + drawHeight + dimensionOffset + tickSize], { stroke: dimensionColor, strokeWidth: 1, selectable: false, evented: false }) // Right tick
+    // Dimension for dim1 (Horizontal on canvas)
+    const dimLine1 = [
+      new fabric.Line([rectLeft, rectTop + drawDim2 + dimensionOffset, rectLeft + drawDim1, rectTop + drawDim2 + dimensionOffset], { stroke: dimensionColor, strokeWidth: 1, selectable: false, evented: false }),
+      new fabric.Line([rectLeft, rectTop + drawDim2 + dimensionOffset - tickSize, rectLeft, rectTop + drawDim2 + dimensionOffset + tickSize], { stroke: dimensionColor, strokeWidth: 1, selectable: false, evented: false }),
+      new fabric.Line([rectLeft + drawDim1, rectTop + drawDim2 + dimensionOffset - tickSize, rectLeft + drawDim1, rectTop + drawDim2 + dimensionOffset + tickSize], { stroke: dimensionColor, strokeWidth: 1, selectable: false, evented: false })
     ];
-    const dimTextWidth = new fabric.Text(stoneWidth.toString(), { // Display original stone width
-      left: rectLeft + drawWidth / 2,
-      top: rectTop + drawHeight + dimensionOffset + 5,
-      fontSize: dimensionTextSize,
-      fill: dimensionColor,
-      originX: 'center',
-      selectable: false, evented: false,
+    const text1 = new fabric.Text(dim1.toString(), { // Use original dimension for text
+      left: rectLeft + drawDim1 / 2, top: rectTop + drawDim2 + dimensionOffset + 5,
+      fontSize: dimensionTextSize, fill: dimensionColor, originX: 'center', selectable: false, evented: false,
     });
-    dimLineWidth.forEach(line => fc.add(line));
-    fc.add(dimTextWidth);
+    dimLine1.forEach(line => fc.add(line));
+    fc.add(text1);
 
-    // Dimension: Height
-    const dimLineHeight = [
-      new fabric.Line([rectLeft - dimensionOffset, rectTop, rectLeft - dimensionOffset, rectTop + drawHeight], { stroke: dimensionColor, strokeWidth: 1, selectable: false, evented: false }), // Main line
-      new fabric.Line([rectLeft - dimensionOffset - tickSize, rectTop, rectLeft - dimensionOffset + tickSize, rectTop], { stroke: dimensionColor, strokeWidth: 1, selectable: false, evented: false }), // Top tick
-      new fabric.Line([rectLeft - dimensionOffset - tickSize, rectTop + drawHeight, rectLeft - dimensionOffset + tickSize, rectTop + drawHeight], { stroke: dimensionColor, strokeWidth: 1, selectable: false, evented: false }) // Bottom tick
+    // Dimension for dim2 (Vertical on canvas)
+    const dimLine2 = [
+      new fabric.Line([rectLeft - dimensionOffset, rectTop, rectLeft - dimensionOffset, rectTop + drawDim2], { stroke: dimensionColor, strokeWidth: 1, selectable: false, evented: false }),
+      new fabric.Line([rectLeft - dimensionOffset - tickSize, rectTop, rectLeft - dimensionOffset + tickSize, rectTop], { stroke: dimensionColor, strokeWidth: 1, selectable: false, evented: false }),
+      new fabric.Line([rectLeft - dimensionOffset - tickSize, rectTop + drawDim2, rectLeft - dimensionOffset + tickSize, rectTop + drawDim2], { stroke: dimensionColor, strokeWidth: 1, selectable: false, evented: false })
     ];
-    const dimTextHeight = new fabric.Text(stoneHeight.toString(), { // Display original stone height
-      left: rectLeft - dimensionOffset - 5,
-      top: rectTop + drawHeight / 2,
-      fontSize: dimensionTextSize,
-      fill: dimensionColor,
-      originX: 'right',
-      originY: 'center',
-      angle: -90, // Rotate text for vertical dimension
+    const text2 = new fabric.Text(dim2.toString(), { // Use original dimension for text
+      left: rectLeft - dimensionOffset - 5, top: rectTop + drawDim2 / 2,
+      fontSize: dimensionTextSize, fill: dimensionColor, originX: 'right', originY: 'center', angle: -90,
       selectable: false, evented: false,
     });
-    dimLineHeight.forEach(line => fc.add(line));
-    fc.add(dimTextHeight);
+    dimLine2.forEach(line => fc.add(line));
+    fc.add(text2);
+
+    // View Label (e.g., "Tlocrt (POGLED ODOZGO)")
+    let viewLabelText = "";
+    if (viewType === 'top') viewLabelText = "TLOCRT (POGLED ODOZGO)";
+    else if (viewType === 'front') viewLabelText = "NACRT (POGLED SPREDA)";
+    else if (viewType === 'side') viewLabelText = "BOČNI NACRT";
+
+    const viewLabel = new fabric.Text(viewLabelText, {
+        left: canvasWidth / 2,
+        top: padding / 2,
+        fontSize: dimensionTextSize + 2,
+        fontWeight: 'bold',
+        fill: strokeColor,
+        originX: 'center',
+        originY: 'center',
+        selectable: false, evented: false,
+    });
+    fc.add(viewLabel);
 
     fc.renderAll();
 
-    // Cleanup
     return () => {
-      if (fc) {
-        fc.dispose();
-        fabricCanvas.current = null;
-      }
+      if (fc) { fc.dispose(); fabricCanvas.current = null; }
     };
-  }, [stoneWidth, stoneHeight, canvasWidth, canvasHeight]);
+  }, [stoneWidth, stoneHeight, stoneDepth, viewType, canvasWidth, canvasHeight]);
 
   return (
-    <div style={{ border: '1px solid #ccc', display: 'inline-block' }}>
+    <div style={{ border: '1px solid #ccc', display: 'inline-block', margin: 'auto' }}>
       <canvas ref={canvasEl} />
     </div>
   );
