@@ -103,24 +103,44 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
     };
 
     let relevantEdgeGroup: EdgeProcessableGroup | null = null;
-    if (viewType === 'front' || viewType === 'side') { // Top/Bottom edges are visible
-        relevantEdgeGroup = 'TOP'; // Check TOP, then BOTTOM
-    } else if (viewType === 'top') { // All 4 "horizontal" edge groups are relevant (TOP, BOTTOM)
-        relevantEdgeGroup = 'TOP'; // Could also be 'BOTTOM', simplified for now
+    let checkProcessingOn: EdgeProcessableGroup[] = [];
+
+    if (viewType === 'front' || viewType === 'side') {
+        checkProcessingOn = ['TOP', 'BOTTOM'];
+    } else if (viewType === 'top') {
+        checkProcessingOn = ['TOP', 'BOTTOM']; // Could be other groups if they define horizontal edges
     }
 
-    if (relevantEdgeGroup) {
-        const procId = edgeProcessingConfig[relevantEdgeGroup] || edgeProcessingConfig.BOTTOM; // Check TOP then BOTTOM
+    checkProcessingOn.forEach(group => {
+        const procId = edgeProcessingConfig[group];
         if (procId) {
             const procDef = sampleEdgeProcessingDefinitions.find(p => p.id === procId);
             if (procDef && procDef.type === 'CHAMFER' && procDef.parameters.width) {
-                // Scale the 3D chamfer size (e.g., 0.1 units) to 2D pixels
-                const chamferSize3D = procDef.parameters.width / 10; // From StoneBlock's scaling
+                const chamferSize3D = procDef.parameters.width / 10;
                 const chamferSize2D = chamferSize3D * pixelsPerUnit * scale;
                 drawChamferLines(chamferSize2D);
+            } else if (procDef && procDef.type === 'ROUND' && procDef.parameters.radius) {
+                const radius3D = procDef.parameters.radius / 10;
+                const radius2D = radius3D * pixelsPerUnit * scale;
+                drawRoundingArcs(radius2D);
             }
         }
-    }
+    });
+
+    // Function to draw rounding arcs (simplified)
+    const drawRoundingArcs = (radius2D: number) => {
+        if (radius2D <= 0) return;
+        const arcColor = '#337AB7'; // A blueish color for rounds
+
+        // Top-left corner arc
+        fc.add(new fabric.Arc({ left: rectLeft, top: rectTop, radius: radius2D, startAngle: 180, endAngle: 270, stroke: arcColor, strokeWidth: 1, fill: '' }));
+        // Top-right corner arc
+        fc.add(new fabric.Arc({ left: rectLeft + dim1 - (radius2D * 2), top: rectTop, radius: radius2D, startAngle: 270, endAngle: 360, stroke: arcColor, strokeWidth: 1, fill: '' }));
+        // Bottom-left corner arc
+        fc.add(new fabric.Arc({ left: rectLeft, top: rectTop + dim2 - (radius2D * 2), radius: radius2D, startAngle: 90, endAngle: 180, stroke: arcColor, strokeWidth: 1, fill: '' }));
+        // Bottom-right corner arc
+        fc.add(new fabric.Arc({ left: rectLeft + dim1 - (radius2D * 2), top: rectTop + dim2 - (radius2D * 2), radius: radius2D, startAngle: 0, endAngle: 90, stroke: arcColor, strokeWidth: 1, fill: '' }));
+    };
 
 
     // Dimension for dim1 (Horizontal on canvas)

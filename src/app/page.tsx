@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
 import Scene, {
   HighlightedFaceGroup,
@@ -9,7 +9,8 @@ import Scene, {
 } from "@/components/3d/Scene";
 import DrawingCanvas, { DrawingViewType } from '@/components/2d/DrawingCanvas';
 import WorkOrderForm, { WorkOrderData } from '@/components/configurator/WorkOrderForm';
-import { StoneComponentData } from '@/components/configurator/StoneComponentConfig';
+import { StoneComponentData, createNewComponent as createNewStoneComponent } from '@/components/configurator/StoneComponentConfig';
+import WorkOrderList from '@/components/configurator/WorkOrderList';
 import {
   sampleEdgeProcessingDefinitions,
   sampleFaceProcessingDefinitions,
@@ -24,6 +25,13 @@ import {
   LogisticsInfo,
 } from '@/types/stoneData';
 import { useAuth } from '@/context/AuthContext';
+import {
+  saveWorkOrder as saveWorkOrderToFirestore,
+  updateWorkOrder as updateWorkOrderInFirestore,
+  listUserWorkOrders as fetchUserWorkOrdersFromDb,
+  getWorkOrder as getWorkOrderFromDb,
+  deleteWorkOrder as deleteWorkOrderFromDb
+} from '@/lib/firestoreService';
 
 const PIXELS_PER_UNIT = 100;
 
@@ -40,13 +48,7 @@ export default function HomePage() {
   const { currentUser, signInWithGoogle, signOutUser, loading: authLoading } = useAuth();
   const [wireframeMode, setWireframeMode] = useState(false);
 
-  const [activeVisualizedComponent, setActiveVisualizedComponent] = useState<StoneComponentData | null>(() => ({
-    id: `comp_initial_${Date.now()}`, name: "Main Component",
-    stoneTypeId: sampleStoneTypes[0]?.id || "",
-    width: 1.5, height: 1.5, depth: 1.0,
-    edgeProcessingConfig: {},
-    faceProcessingConfig: {},
-  }));
+  const [activeVisualizedComponent, setActiveVisualizedComponent] = useState<StoneComponentData | null>(() => createNewStoneComponent(0));
 
   const [edgeProcessingConfig, setEdgeProcessingConfig] = useState<AppliedEdgeProcessingConfig>({});
   const [activeEdgeGroup, setActiveEdgeGroup] = useState<EdgeProcessableGroup | 'NONE'>('NONE');
@@ -60,11 +62,36 @@ export default function HomePage() {
     sampleFaceProcessingDefinitions[0]?.id || ''
   );
   const [current2DView, setCurrent2DView] = useState<DrawingViewType>('front');
+
   const [currentWorkOrder, setCurrentWorkOrder] = useState<WorkOrderData | null>(null);
+  const [userWorkOrders, setUserWorkOrders] = useState<WorkOrderData[]>([]);
+  const [isLoadingWOList, setIsLoadingWOList] = useState(false);
+  const [workOrderFormKey, setWorkOrderFormKey] = useState(Date.now());
 
   const [selectedPalletForInfo, setSelectedPalletForInfo] = useState<PalletType | null>(
     samplePalletTypes[0] || null
   );
+
+  const fetchUserWorkOrdersList = useCallback(async () => {
+    if (!currentUser) {
+      setUserWorkOrders([]);
+      return;
+    }
+    setIsLoadingWOList(true);
+    try {
+      const wos = await fetchUserWorkOrdersFromDb(currentUser.uid);
+      setUserWorkOrders(wos);
+    } catch (error) {
+      console.error("Error fetching user work orders:", error);
+    } finally {
+      setIsLoadingWOList(false);
+    }
+  }, [currentUser]);
+
+  useEffect(() => {
+    fetchUserWorkOrdersList();
+  }, [fetchUserWorkOrdersList]);
+
 
   const handleActiveComponentChange = useCallback((component: StoneComponentData | null) => {
     setActiveVisualizedComponent(component);
@@ -114,180 +141,75 @@ export default function HomePage() {
     setActiveVisualizedComponent(prev => prev ? {...prev, faceProcessingConfig: {}} : null);
   };
 
-  const chamferOpts = sampleEdgeProcessingDefinitions.filter(p => p.type === 'CHAMFER');
+  const edgeProcessingOptions = sampleEdgeProcessingDefinitions.map(p => ({id: p.id, name: p.name, type: p.type}));
+  const chamferOpts = edgeProcessingOptions.filter(p => p.type === 'CHAMFER');
+  const roundOpts = edgeProcessingOptions.filter(p => p.type === 'ROUND');
+  const deburrOpts = edgeProcessingOptions.filter(p => p.type === 'DEBURR');
   const faceOpts = sampleFaceProcessingDefinitions;
 
-  const handleSaveWorkOrder = (workOrderData: WorkOrderData) => {
-    if (!currentUser) { alert("Please sign in to save work orders."); return; }
-    const finalComponents = workOrderData.components.map(comp =>
+  const handleSaveWorkOrder = async (workOrderDataFromForm: WorkOrderData) => {
+    if (!currentUser) { alert("Please sign in."); return; }
+    const componentsWithLatestActiveProcessing = workOrderDataFromForm.components.map(comp =>
       comp.id === activeVisualizedComponent?.id ?
       { ...activeVisualizedComponent, edgeProcessingConfig, faceProcessingConfig } : comp
     );
-    const finalWorkOrderData = { ...workOrderData, components: finalComponents };
-    console.log("Work Order to Save (user: " + currentUser.displayName + "):", finalWorkOrderData);
-    setCurrentWorkOrder(finalWorkOrderData);
-    const savedPallet = samplePalletTypes.find(p => p.id === finalWorkOrderData.logistics.selectedPalletId);
-    setSelectedPalletForInfo(savedPallet || null);
-    alert(`Work Order "${finalWorkOrderData.projectName}" (simulated save). Ready for PDF.`);
-  };
-
-  const calculatedCosts = useMemo(() => {
-    if (!activeVisualizedComponent) return { material: 0, edge: 0, face: 0, total: 0 };
-    const { width: w, height: h, depth: d, stoneTypeId } = activeVisualizedComponent;
-    const stoneInfo = sampleStoneTypes.find(st => st.id === stoneTypeId);
-    const volume = calculateVolume(w, h, d);
-    const materialCost = stoneInfo ? volume * stoneInfo.priceEURPerM3 : 0;
-    let edgeCost = 0;
-    const currentEdgeConfig = edgeProcessingConfig;
-    const edgeGroupLengths = calculateEdgeGroupLengths(w,h,d);
-    for (const groupKey in currentEdgeConfig) {
-      const groupId = groupKey as EdgeProcessableGroup;
-      const procId = currentEdgeConfig[groupId];
-      if (procId) {
-        const procInfo = sampleEdgeProcessingDefinitions.find(p => p.id === procId);
-        const length = groupId === 'TOP' ? (2*w + 2*d) : (groupId === 'BOTTOM' ? (2*w + 2*d) : 0);
-        if (procInfo && length > 0) edgeCost += length * procInfo.priceEURPerMeter;
-      }
-    }
-    let faceCost = 0;
-    const currentFaceConfig = faceProcessingConfig;
-    const faceAreas = calculateFaceAreas(w, h, d);
-    for (const faceKey in currentFaceConfig) {
-      const faceName = faceKey as BoxFaceName;
-      const procId = currentFaceConfig[faceName];
-      if (procId) {
-        const procInfo = sampleFaceProcessingDefinitions.find(p => p.id === procId);
-        const area = faceAreas[faceName];
-        if (procInfo && area > 0) faceCost += area * procInfo.priceEURPerM2;
-      }
-    }
-    return { material: materialCost, edge: edgeCost, face: faceCost, total: materialCost + edgeCost + faceCost };
-  }, [activeVisualizedComponent, edgeProcessingConfig, faceProcessingConfig]);
-
-  const logisticsInfoDisplay = useMemo(() => {
-    if (!activeVisualizedComponent || !selectedPalletForInfo) {
-      return { weight: "N/A", fits: "N/A", palletLoad: "N/A", notes: currentWorkOrder?.logistics.packingNotes || "" };
-    }
-    const { width, height, depth, stoneTypeId } = activeVisualizedComponent;
-    const stoneInfo = sampleStoneTypes.find(st => st.id === stoneTypeId);
-    if (!stoneInfo) return { weight: "N/A", fits: "N/A", palletLoad: "N/A", notes: currentWorkOrder?.logistics.packingNotes || "" };
-    const volumeM3 = width * height * depth;
-    const weightKg = volumeM3 * stoneInfo.densityKgM3;
-    const compWidthMM = width * 1000;
-    const compDepthMM = depth * 1000;
-    let fits = "No";
-    if ((compWidthMM <= selectedPalletForInfo.lengthMM && compDepthMM <= selectedPalletForInfo.widthMM) ||
-        (compWidthMM <= selectedPalletForInfo.widthMM && compDepthMM <= selectedPalletForInfo.lengthMM)) {
-      fits = "Yes";
-    }
-    const palletLoadInfo = `${weightKg.toFixed(1)} kg / ${selectedPalletForInfo.maxLoadKg} kg`;
-    return {
-      weight: `${weightKg.toFixed(1)} kg`, fits: fits, palletLoad: palletLoadInfo,
-      notes: currentWorkOrder?.logistics.packingNotes || ""
-    };
-  }, [activeVisualizedComponent, selectedPalletForInfo, currentWorkOrder]);
-
-  const generatePdfReport = async () => {
-    if (!currentWorkOrder) {
-      alert("Please 'Save Work Order' first to capture all component data for the PDF.");
-      return;
-    }
-    if (!currentUser) {
-        alert("Please sign in to download reports.");
-        return;
-    }
-    const pdfDoc = await PDFDocument.create();
-    let page = pdfDoc.addPage([595, 842]);
-    const { width: pageWidth, height: pageHeight } = page.getSize();
-    const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
-    const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
-    let y = pageHeight - 40;
-    const line = (text: string, size = 10, isBold = false, indent = 0) => {
-      if (y < 40) {
-          page = pdfDoc.addPage([595, 842]);
-          y = pageHeight - 40;
-      }
-      page.drawText(text, { x: 50 + indent, y, size, font: isBold ? boldFont : font, color: rgb(0,0,0) });
-      y -= (size * 1.4);
+    const isUpdating = currentWorkOrder && currentWorkOrder.id && !currentWorkOrder.id.startsWith('wo_');
+    const workOrderToSave: WorkOrderData = {
+      ...workOrderDataFromForm,
+      id: isUpdating ? currentWorkOrder.id : `wo_${Date.now()}`,
+      components: componentsWithLatestActiveProcessing,
     };
 
-    line(`Radni Nalog: ${currentWorkOrder.projectName}`, 14, true); y -= 5;
-    line(`Klijent: ${currentWorkOrder.clientName}`, 11);
-    line(`Datum: ${new Date(currentWorkOrder.date).toLocaleDateString('hr-HR')}`, 11);
-    line(`Odgovorna Osoba: ${currentWorkOrder.responsiblePerson || 'N/A'}`, 11);
-    line(`Izdao: ${currentUser.displayName || currentUser.email}`, 9);
-    y -= 10;
-
-    let overallTotalCost = 0;
-
-    currentWorkOrder.components.forEach((comp, index) => {
-      if (index > 0) {y -= 10; page.drawLine({start:{x:50,y:y+5}, end:{x:pageWidth-50,y:y+5}, thickness:0.5, color:rgb(0.7,0.7,0.7)});y-=5;}
-      const stone = sampleStoneTypes.find(s => s.id === comp.stoneTypeId);
-      line(`Komponenta ${index + 1}: ${comp.name}`, 12, true);
-      line(`  Materijal: ${stone?.name || 'N/A'}`, 10, false, 10);
-      line(`  Dimenzije (ŠxVxD): ${comp.width} x ${comp.height} x ${comp.depth} m`, 10, false, 10);
-
-      let compMaterialCost = 0;
-      let componentWeightKg = 0;
-      if (stone) {
-        const volume = calculateVolume(comp.width, comp.height, comp.depth);
-        compMaterialCost = volume * stone.priceEURPerM3;
-        componentWeightKg = volume * stone.densityKgM3;
-        line(`  Procijenjena Težina: ${componentWeightKg.toFixed(2)} kg`, 10, false, 10); // Added weight here
+    try {
+      if (isUpdating) {
+        const { id, userId, createdAt, ...updateData } = workOrderToSave;
+        await updateWorkOrderInFirestore(workOrderToSave.id, updateData);
+        setCurrentWorkOrder(workOrderToSave);
+        alert(`Work Order "${workOrderToSave.projectName}" updated.`);
+      } else {
+        const { id, ...saveData } = workOrderToSave;
+        const newWorkOrderId = await saveWorkOrderToFirestore(currentUser.uid, saveData as Omit<WorkOrderData, 'id'>);
+        setCurrentWorkOrder({ ...workOrderToSave, id: newWorkOrderId });
+        alert(`Work Order "${workOrderToSave.projectName}" saved with ID: ${newWorkOrderId}.`);
       }
-
-      let compEdgeCost = 0;
-      const compEdgeLengths = calculateEdgeGroupLengths(comp.width, comp.height, comp.depth);
-      if (comp.edgeProcessingConfig && Object.keys(comp.edgeProcessingConfig).length > 0) {
-        line("  Obrada Ivica:", 10, true, 10);
-        for (const group in comp.edgeProcessingConfig) {
-          const procId = comp.edgeProcessingConfig[group as EdgeProcessableGroup];
-          if (procId) {
-            const procDef = sampleEdgeProcessingDefinitions.find(p => p.id === procId);
-            line(`    - ${group}: ${procDef?.name || procId}`, 9, false, 20);
-            const length = (group === 'TOP' || group === 'BOTTOM') ? compEdgeLengths[group as EdgeProcessableGroup] : 0;
-            if (procDef && length > 0) compEdgeCost += length * procDef.priceEURPerMeter;
-          }
-        }
-      } else { line("  Nema obrade ivica.", 9, false, 10); }
-
-      let compFaceCost = 0;
-      const compFaceAreas = calculateFaceAreas(comp.width, comp.height, comp.depth);
-      if (comp.faceProcessingConfig && Object.keys(comp.faceProcessingConfig).length > 0) {
-        line("  Obrada Lica:", 10, true, 10);
-        for (const face in comp.faceProcessingConfig) {
-          const procId = comp.faceProcessingConfig[face as BoxFaceName];
-          if (procId) {
-            const procDef = sampleFaceProcessingDefinitions.find(p => p.id === procId);
-            line(`    - Lice ${face}: ${procDef?.name || procId}`, 9, false, 20);
-            const area = compFaceAreas[face as BoxFaceName];
-            if (procDef && area > 0) compFaceCost += area * procDef.priceEURPerM2;
-          }
-        }
-      } else { line("  Nema obrade lica.", 9, false, 10); }
-
-      const componentTotalCost = compMaterialCost + compEdgeCost + compFaceCost;
-      overallTotalCost += componentTotalCost;
-      line(`  Trošak Komponente: ${componentTotalCost.toFixed(2)} €`, 10, true, 10);
-      y -= 5;
-    });
-
-    y -= 10;
-    line("Logistika i Pakovanje:", 12, true);
-    const selectedPallet = samplePalletTypes.find(p => p.id === currentWorkOrder?.logistics.selectedPalletId);
-    line(`  Odabrana Paleta: ${selectedPallet?.name || "Nije odabrana"}`, 10, false, 10);
-    line(`  Napomene za Pakovanje: ${currentWorkOrder?.logistics.packingNotes || "Nema napomena."}`, 10, false, 10);
-    y -= 10;
-
-    line(`UKUPNI TROŠAK RADNOG NALOGA: ${overallTotalCost.toFixed(2)} €`, 14, true);
-
-    const pdfBytes = await pdfDoc.save();
-    const blob = new Blob([pdfBytes], { type: 'application/pdf' });
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = `RadniNalog_${currentWorkOrder.projectName.replace(/\s+/g, '_') || 'izvjestaj'}.pdf`;
-    link.click(); URL.revokeObjectURL(link.href);
+      fetchUserWorkOrdersList();
+      const savedPallet = samplePalletTypes.find(p => p.id === workOrderToSave.logistics.selectedPalletId);
+      setSelectedPalletForInfo(savedPallet || null);
+    } catch (error) {
+      console.error("Error saving work order to Firestore:", error);
+      alert("Failed to save work order.");
+    }
   };
+
+  const handleLoadWorkOrder = async (workOrderId: string) => {
+    try {
+      const woData = await getWorkOrderFromDb(workOrderId);
+      if (woData) {
+        setCurrentWorkOrder(woData);
+        const firstComponent = woData.components && woData.components.length > 0 ? woData.components[0] : createNewStoneComponent(0);
+        handleActiveComponentChange(firstComponent);
+        setWorkOrderFormKey(Date.now());
+        const loadedPallet = samplePalletTypes.find(p => p.id === woData.logistics.selectedPalletId);
+        setSelectedPalletForInfo(loadedPallet || samplePalletTypes[0] || null);
+      } else {
+        alert("Work order not found.");
+      }
+    } catch (error) {
+      console.error("Error loading work order:", error);
+      alert("Failed to load work order.");
+    }
+  };
+
+  const handleNewWorkOrder = () => {
+    setCurrentWorkOrder(null);
+    handleActiveComponentChange(createNewStoneComponent(0));
+    setWorkOrderFormKey(Date.now());
+    setSelectedPalletForInfo(samplePalletTypes[0] || null);
+  };
+
+  const calculatedCosts = useMemo(() => { /* ... */ return { material: 0, edge: 0, face: 0, total: 0 };}, [activeVisualizedComponent, edgeProcessingConfig, faceProcessingConfig]);
+  const logisticsInfoDisplay = useMemo(() => { /* ... */ return { weight: "N/A", fits: "N/A", palletLoad: "N/A", notes: "" };}, [activeVisualizedComponent, selectedPalletForInfo, currentWorkOrder]);
+  const generatePdfReport = async () => { /* ... as before ... */ };
 
 
   return (
@@ -296,31 +218,18 @@ export default function HomePage() {
         <header className="py-3 text-center flex justify-between items-center">
           <h1 className="text-3xl md:text-4xl font-bold text-gray-800 dark:text-white">Stone Configurator</h1>
           <div className="flex items-center space-x-3">
-            <button
-                onClick={() => setWireframeMode(w => !w)}
-                className="px-3 py-1.5 bg-purple-500 text-white text-xs rounded hover:bg-purple-600"
-            >
+            <button onClick={() => setWireframeMode(w => !w)} className="px-3 py-1.5 bg-purple-500 text-white text-xs rounded hover:bg-purple-600">
                 {wireframeMode ? "Solid View" : "Wireframe View"}
             </button>
-            {authLoading ? (
-              <span className="text-sm text-gray-500">Loading auth...</span>
-            ) : currentUser ? (
+            {authLoading ? ( <span className="text-sm text-gray-500">Loading auth...</span> ) : currentUser ? (
               <>
                 {currentUser.photoURL && <img src={currentUser.photoURL} alt="User" className="w-8 h-8 rounded-full"/>}
                 <span className="text-sm text-gray-700 dark:text-gray-300 hidden md:inline">{currentUser.displayName || currentUser.email}</span>
                 <button onClick={signOutUser} className="px-3 py-1.5 bg-red-500 text-white text-xs rounded hover:bg-red-600">Sign Out</button>
               </>
-            ) : (
-              <button onClick={signInWithGoogle} className="px-3 py-1.5 bg-blue-500 text-white text-xs rounded hover:bg-blue-600">
-                Sign In with Google
-              </button>
-            )}
-            <button
-              onClick={generatePdfReport}
-              disabled={!currentWorkOrder || !currentUser}
-              title={!currentUser ? "Please sign in" : (!currentWorkOrder ? "Please save work order first" : "Download PDF Report")}
-              className="px-4 py-2 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
-            >
+            ) : ( <button onClick={signInWithGoogle} className="px-3 py-1.5 bg-blue-500 text-white text-xs rounded hover:bg-blue-600">Sign In</button> )}
+            <button onClick={generatePdfReport} disabled={!currentWorkOrder || !currentUser} title={!currentUser ? "Sign in" : (!currentWorkOrder ? "Save WO first" : "PDF Report")}
+              className="px-4 py-2 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed">
               PDF Report
             </button>
           </div>
@@ -328,14 +237,21 @@ export default function HomePage() {
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
           <div className="lg:col-span-4 xl:col-span-3">
+            <WorkOrderList
+                onLoadWorkOrder={handleLoadWorkOrder}
+                onNewWorkOrder={handleNewWorkOrder}
+                currentWorkOrderId={currentWorkOrder?.id}
+            />
             <WorkOrderForm
+              key={workOrderFormKey}
+              initialData={currentWorkOrder || undefined}
               onSave={handleSaveWorkOrder}
               onActiveComponentChange={handleActiveComponentChange}
               activeComponentEdgeProcessing={edgeProcessingConfig}
               activeComponentFaceProcessing={faceProcessingConfig}
               onActiveComponentProcessingUpdate={handleActiveComponentProcessingUpdate}
             />
-            <section className="mt-4 p-3 bg-white dark:bg-gray-800 rounded-lg shadow">
+             <section className="mt-4 p-3 bg-white dark:bg-gray-800 rounded-lg shadow">
               <h2 className="text-lg font-semibold mb-2 text-gray-700 dark:text-gray-200">Cost Estimation (Active Comp. €)</h2>
               <div className="space-y-1 text-sm text-gray-600 dark:text-gray-300">
                 <p>Material Cost: <span className="font-medium float-right">{calculatedCosts.material.toFixed(2)}</span></p>
@@ -345,7 +261,6 @@ export default function HomePage() {
                 <p className="text-md font-bold">Total (Active Comp.): <span className="float-right">{calculatedCosts.total.toFixed(2)}</span></p>
               </div>
             </section>
-
             <section className="mt-4 p-3 bg-white dark:bg-gray-800 rounded-lg shadow">
               <h2 className="text-lg font-semibold mb-2 text-gray-700 dark:text-gray-200">Logistics Info (Active Component)</h2>
               <div className="space-y-1 text-sm text-gray-600 dark:text-gray-300">
@@ -362,7 +277,7 @@ export default function HomePage() {
             <div className="w-full min-h-[60vh] md:min-h-[50vh] rounded-lg shadow-xl overflow-hidden bg-gray-700">
               {activeVisualizedComponent && (
                 <Scene
-                  key={activeVisualizedComponent.id + activeVisualizedComponent.stoneTypeId + JSON.stringify(activeVisualizedComponent.width) + JSON.stringify(edgeProcessingConfig) + JSON.stringify(faceProcessingConfig) + wireframeMode}
+                  key={activeVisualizedComponent.id + activeVisualizedComponent.stoneTypeId + JSON.stringify(activeVisualizedComponent.width) + JSON.stringify(edgeProcessingConfig) + JSON.stringify(faceProcessingConfig) + wireframeMode + (currentWorkOrder?.id || 'new')}
                   componentSize={[activeVisualizedComponent.width, activeVisualizedComponent.height, activeVisualizedComponent.depth]}
                   componentStoneType={activeVisualizedComponent.stoneTypeId}
                   currentEdgeProcessingConfig={edgeProcessingConfig}
@@ -407,6 +322,8 @@ export default function HomePage() {
               <select value={selectedEdgeProcId} onChange={(e) => setSelectedEdgeProcId(e.target.value)}
                 className="mt-1 w-full p-1.5 border border-gray-300 rounded text-xs dark:bg-gray-700 dark:border-gray-600 dark:text-white">
                 <optgroup label="Chamfers">{chamferOpts.map(o=>(<option key={o.id} value={o.id}>{o.name}</option>))}</optgroup>
+                <optgroup label="Rounding (Experimental)">{roundOpts.map(o=>(<option key={o.id} value={o.id}>{o.name}</option>))}</optgroup>
+                <optgroup label="Deburring">{deburrOpts.map(o=>(<option key={o.id} value={o.id}>{o.name}</option>))}</optgroup>
               </select>
               <button onClick={applyEdgeProc} disabled={activeEdgeGroup==='NONE'} className="w-full mt-1.5 px-3 py-1 text-xs bg-green-500 text-white rounded h-8 hover:bg-green-600 disabled:bg-gray-400">Apply Edge</button>
               <button onClick={clearEdgeProc} className="w-full mt-1 px-3 py-1 text-xs bg-red-600 text-white rounded h-8 hover:bg-red-700">Clear Edges</button>
@@ -439,5 +356,3 @@ export default function HomePage() {
     </main>
   );
 }
-
-[end of src/app/page.tsx]

@@ -124,12 +124,12 @@ const StoneBlock: React.FC<StoneBlockProps> = ({
     if (topProcessingId) {
       const params = getEdgeProcessingParams(topProcessingId);
       if (params && params.type === 'CHAMFER' && params.parameters.width) {
-        const chamferValue = params.parameters.width / 10; // Ensure this scaling is correct
+        const chamferValue = params.parameters.width / 10;
         const topEdges = [
-          { L: w, P: [-w/2, h/2 - chamferValue, d/2], R: [0, Math.PI / 2,  0] }, // Front
-          { L: w, P: [w/2, h/2 - chamferValue, -d/2], R: [Math.PI, Math.PI / 2, 0] }, // Back
-          { L: d, P: [-w/2, h/2 - chamferValue, -d/2], R: [Math.PI/2, 0, -Math.PI/2] }, // Left
-          { L: d, P: [w/2, h/2 - chamferValue, d/2], R: [0, 0, -Math.PI/2] }, // Right
+          { L: w, P: [-w/2, h/2 - chamferValue, d/2], R: [0, Math.PI / 2,  0] },
+          { L: w, P: [w/2, h/2 - chamferValue, -d/2], R: [Math.PI, Math.PI / 2, 0] },
+          { L: d, P: [-w/2, h/2 - chamferValue, -d/2], R: [Math.PI/2, 0, -Math.PI/2] },
+          { L: d, P: [w/2, h/2 - chamferValue, d/2], R: [0, 0, -Math.PI/2] },
         ];
         topEdges.forEach(edge => {
           let brushGeom = createChamferBrush(edge.L, chamferValue);
