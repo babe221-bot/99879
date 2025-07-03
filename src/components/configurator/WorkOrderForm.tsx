@@ -12,7 +12,7 @@ export interface WorkOrderData {
   date: string;
   responsiblePerson?: string;
   components: StoneComponentData[];
-  logistics: LogisticsInfo; // Added logistics info
+  logistics: LogisticsInfo;
 }
 
 interface WorkOrderFormProps {
@@ -25,6 +25,7 @@ interface WorkOrderFormProps {
     edgeConfig: AppliedEdgeProcessingConfig,
     faceConfig: AppliedFaceProcessingConfig
   ) => void;
+  isSaving?: boolean;
 }
 
 const createNewComponent = (index: number): StoneComponentData => ({
@@ -42,14 +43,15 @@ const WorkOrderForm: React.FC<WorkOrderFormProps> = ({
   onActiveComponentChange,
   activeComponentEdgeProcessing,
   activeComponentFaceProcessing,
-  onActiveComponentProcessingUpdate
+  onActiveComponentProcessingUpdate,
+  isSaving = false
 }) => {
   const [workOrder, setWorkOrder] = useState<WorkOrderData>(
     initialData || {
       id: `wo_${Date.now()}`,
       projectName: "", clientName: "", date: new Date().toISOString().split('T')[0],
       components: [createNewComponent(0)],
-      logistics: { selectedPalletId: samplePalletTypes[0]?.id || "", packingNotes: "" }, // Initialize logistics
+      logistics: { selectedPalletId: samplePalletTypes[0]?.id || "", packingNotes: "" },
     }
   );
   const [activeComponentId, setActiveComponentId] = useState<string | null>(
@@ -101,13 +103,13 @@ const WorkOrderForm: React.FC<WorkOrderFormProps> = ({
     });
   };
 
-  const addComponent = () => { /* ... as before ... */
+  const addComponent = () => {
     setWorkOrder(prev => ({
       ...prev,
       components: [...prev.components, createNewComponent(prev.components.length)]
     }));
   };
-  const removeComponent = (componentId: string) => { /* ... as before ... */
+  const removeComponent = (componentId: string) => {
     setWorkOrder(prev => {
       const newComponents = prev.components.filter(c => c.id !== componentId);
       if (componentId === activeComponentId) {
@@ -118,7 +120,7 @@ const WorkOrderForm: React.FC<WorkOrderFormProps> = ({
       return { ...prev, components: newComponents };
     });
   };
-  const setActive = (componentId: string) => { /* ... as before ... */
+  const setActive = (componentId: string) => {
     const newActiveComp = workOrder.components.find(c => c.id === componentId);
     if (newActiveComp) {
       setActiveComponentId(componentId);
@@ -129,9 +131,15 @@ const WorkOrderForm: React.FC<WorkOrderFormProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => { e.preventDefault(); onSave(workOrder); };
 
+  // Button Style Constants (can be moved to a shared location later)
+  const btnBase = "px-3 py-1.5 text-xs rounded transition-colors duration-150 ease-in-out";
+  const btnPrimary = `${btnBase} bg-blue-600 hover:bg-blue-700 text-white disabled:bg-gray-400 disabled:cursor-not-allowed`;
+  const btnGreenSubmit = "w-full px-4 py-2 text-sm rounded transition-colors duration-150 ease-in-out bg-green-600 hover:bg-green-700 text-white disabled:bg-gray-400 disabled:cursor-not-allowed";
+
+
   return (
     <form onSubmit={handleSubmit} className="p-3 space-y-3 bg-white dark:bg-gray-800 rounded-lg shadow h-full flex flex-col">
-      <div> {/* Work Order Details Section */}
+      <div>
         <h2 className="text-lg font-semibold text-gray-700 dark:text-gray-200 border-b pb-1.5">Work Order Details</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mt-2 text-sm">
           <div>
@@ -139,7 +147,6 @@ const WorkOrderForm: React.FC<WorkOrderFormProps> = ({
             <input type="text" name="projectName" id="projectName" value={workOrder.projectName} onChange={handleWorkOrderInputChange}
               className="w-full p-1.5 border-gray-300 rounded dark:bg-gray-700 dark:text-white text-xs" required />
           </div>
-          {/* ... other WO fields ... */}
           <div>
             <label htmlFor="clientName" className="block text-xs font-medium">Client Name:</label>
             <input type="text" name="clientName" id="clientName" value={workOrder.clientName} onChange={handleWorkOrderInputChange}
@@ -158,7 +165,7 @@ const WorkOrderForm: React.FC<WorkOrderFormProps> = ({
         </div>
       </div>
 
-      <div className="flex-grow overflow-y-auto pr-1 space-y-2 border-t border-b py-2 my-1 dark:border-gray-700"> {/* Components Section */}
+      <div className="flex-grow overflow-y-auto pr-1 space-y-2 border-t border-b py-2 my-1 dark:border-gray-700">
         <h3 className="text-md font-semibold text-gray-700 dark:text-gray-200">Stone Components</h3>
         {workOrder.components.map((comp, index) => (
           <StoneComponentConfig key={comp.id} component={comp} isActive={comp.id === activeComponentId}
@@ -166,12 +173,12 @@ const WorkOrderForm: React.FC<WorkOrderFormProps> = ({
             onRemove={() => removeComponent(comp.id)} onSetActive={() => setActive(comp.id)} />
         ))}
         <button type="button" onClick={addComponent}
-          className="w-full mt-1.5 px-3 py-1.5 text-xs bg-blue-500 text-white rounded hover:bg-blue-600">
+          className={`${btnPrimary} w-full mt-1.5`}> {/* Using defined button style */}
           + Add Component
         </button>
       </div>
 
-      <div> {/* Logistics Section */}
+      <div>
         <h3 className="text-md font-semibold text-gray-700 dark:text-gray-200 pt-1.5 border-b pb-1">Logistics & Packing</h3>
         <div className="grid grid-cols-1 gap-2 mt-2 text-sm">
             <div>
@@ -189,11 +196,12 @@ const WorkOrderForm: React.FC<WorkOrderFormProps> = ({
         </div>
       </div>
 
-      <div className="pt-2"> {/* Save Button */}
+      <div className="pt-2">
         <button type="submit"
-          className="w-full px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 transition-colors text-sm"
-          title="Simulates saving; actual Firestore save not yet implemented for full WO.">
-          Save Work Order (Simulated)
+          disabled={isSaving}
+          className={btnGreenSubmit}
+        >
+          {isSaving ? "Saving..." : "Save Work Order"}
         </button>
       </div>
     </form>

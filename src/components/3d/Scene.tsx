@@ -230,6 +230,7 @@ interface SceneProps {
   componentSize: [number, number, number];
   componentStoneType: string;
   wireframeMode?: boolean;
+  onCanvasRef?: (canvas: HTMLCanvasElement | null) => void; // For capturing 3D view
 }
 
 const Scene: React.FC<SceneProps> = ({
@@ -239,9 +240,24 @@ const Scene: React.FC<SceneProps> = ({
   componentSize,
   componentStoneType,
   wireframeMode = false,
+  onCanvasRef,
 }) => {
   const [highlightedGroupVisual, setHighlightedGroupVisual] = useState<HighlightedFaceGroup>('NONE');
   const [isBlockHovered, setIsBlockHovered] = useState<boolean>(false);
+  const canvasInternalRef = useRef<HTMLCanvasElement>(null);
+
+  useEffect(() => {
+    if (onCanvasRef && canvasInternalRef.current) {
+      onCanvasRef(canvasInternalRef.current);
+    }
+    // Call onCanvasRef with null when the component unmounts or if the ref becomes null
+    return () => {
+      if (onCanvasRef) {
+        onCanvasRef(null);
+      }
+    };
+  }, [onCanvasRef, canvasInternalRef]);
+
 
   const handleStoneClick = (event: ThreeEvent<MouseEvent>, faceNormal: THREE.Vector3 | null, faceIndex?: number) => {
     let group: HighlightedFaceGroup = 'NONE';

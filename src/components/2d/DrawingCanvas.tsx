@@ -12,10 +12,11 @@ interface DrawingCanvasProps {
   stoneHeight: number;
   stoneDepth: number;
   viewType: DrawingViewType;
-  edgeProcessingConfig?: AppliedEdgeProcessingConfig; // Pass edge processing
+  edgeProcessingConfig?: AppliedEdgeProcessingConfig;
   canvasWidth?: number;
   canvasHeight?: number;
-  pixelsPerUnit?: number; // For scaling chamfer size
+  pixelsPerUnit?: number;
+  onCanvasReady?: (canvas: fabric.Canvas | null) => void; // Callback to expose canvas instance
 }
 
 const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
@@ -34,13 +35,18 @@ const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
   useEffect(() => {
     if (!canvasEl.current) return;
 
-    fabricCanvas.current = new fabric.Canvas(canvasEl.current, {
+    const newCanvas = new fabric.Canvas(canvasEl.current, {
       width: canvasWidth,
       height: canvasHeight,
       backgroundColor: '#f8f8f8',
       selection: false,
     });
-    const fc = fabricCanvas.current;
+    fabricCanvas.current = newCanvas;
+    if (onCanvasReady) {
+      onCanvasReady(newCanvas);
+    }
+
+    const fc = newCanvas; // Use newCanvas instance directly
 
     const padding = 50;
     const strokeColor = '#333';
