@@ -1,15 +1,12 @@
 import * as THREE from 'three';
-import { geom3, poly3 } from '@jscad/modeling').geometries; // Import types from JSCAD
-import { vec3 } from '@jscad/modeling').maths; // Import vec3 type
+import { geom3, poly3 } from '@jscad/modeling').geometries;
+import { vec3 } from '@jscad/modeling').maths;
 
-// Helper function to triangulate a polygon (assuming convex polygon)
-// A simple fan triangulation from the first vertex.
 const triangulatePolygon = (polygon: poly3): Array<Array<vec3>> => {
   const triangles: Array<Array<vec3>> = [];
   if (polygon.vertices.length < 3) {
-    return triangles; // Not a valid polygon for triangulation
+    return triangles;
   }
-  // Assuming vertices are ordered (e.g., counter-clockwise)
   const firstVertex = polygon.vertices[0];
   for (let i = 1; i < polygon.vertices.length - 1; i++) {
     triangles.push([firstVertex, polygon.vertices[i], polygon.vertices[i + 1]]);
@@ -23,68 +20,102 @@ export const convertJscadGeomToThreeBufferGeometry = (jscadGeom: geom3): THREE.B
 
   const positions: number[] = [];
   const normals: number[] = [];
-  const uvs: number[] = []; // Basic UVs, likely incorrect for complex shapes
+  const uvs: number[] = [];
+
+  if (jscadPolygons.length === 0) {
+    return threeGeometry; // Return empty geometry if no polygons
+  }
+
+  // For Box Projection UVs, calculate the bounding box of the entire geometry once.
+  // geom3.measureBoundingBox returns [[minX, minY, minZ], [maxX, maxY, maxZ]]
+  const bbox = geom3.measureBoundingBox(jscadGeom);
+  if (!bbox || !bbox[0] || !bbox[1]) { // Bbox might be null for empty geometry
+      console.warn("JSCAD geometry has no bounding box, UVs will be [0,0]");
+      // Return empty geometry or geometry with just positions/normals if that's preferable
+      // For now, proceed but UVs will be bad.
+      // A robust solution might be to throw an error or handle this case more gracefully.
+      // Let's assume bbox is valid for typical cases.
+      // If size is zero in any dimension, UVs will also be problematic.
+      const tempMin = [0,0,0];
+      const tempMax = [0,0,0];
+      // A default small bounding box to prevent division by zero if bbox is degenerate
+      const min = bbox && bbox[0] ? bbox[0] : tempMin;
+      const max = bbox && bbox[1] ? bbox[1] : tempMax;
+
+      jscadPolygons.forEach(polygon => {
+        const triangles = triangulatePolygon(polygon);
+        triangles.forEach(triangle => {
+            const v = [triangle[0], triangle[1], triangle[2]];
+            const pA = new THREE.Vector3().fromArray(v[0]);
+            const pB = new THREE.Vector3().fromArray(v[1]);
+            const pC = new THREE.Vector3().fromArray(v[2]);
+            const cb = new THREE.Vector3().subVectors(pC, pB);
+            const ab = new THREE.Vector3().subVectors(pA, pB);
+            const faceNormalVec3 = cb.cross(ab).normalize();
+            const normal = faceNormalVec3.toArray();
+            v.forEach(vertex => {
+                positions.push(...vertex);
+                normals.push(...normal, ...normal, ...normal); // Re-check this, should be one normal per vertex
+                uvs.push(0,0); // Fallback UVs
+            });
+        });
+      });
+      if (positions.length > 0) {
+        threeGeometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+        threeGeometry.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3)); // Ensure normals array matches positions length
+        threeGeometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+      }
+      return threeGeometry;
+
+  }
+
+  const minBound = vec3.fromValues(bbox[0][0], bbox[0][1], bbox[0][2]);
+  const maxBound = vec3.fromValues(bbox[1][0], bbox[1][1], bbox[1][2]);
+  const geomSize = vec3.subtract(vec3.create(), maxBound, minBound);
+
 
   jscadPolygons.forEach(polygon => {
     const triangles = triangulatePolygon(polygon);
 
     triangles.forEach(triangle => {
-      // Assuming triangle vertices are vec3 [x, y, z]
-      const v0 = triangle[0];
-      const v1 = triangle[1];
-      const v2 = triangle[2];
+      const v = [triangle[0], triangle[1], triangle[2]];
 
-      // Add positions
-      positions.push(...v0, ...v1, ...v2);
+      const pA = new THREE.Vector3().fromArray(v[0]);
+      const pB = new THREE.Vector3().fromArray(v[1]);
+      const pC = new THREE.Vector3().fromArray(v[2]);
+      const cb = new THREE.Vector3().subVectors(pC, pB);
+      const ab = new THREE.Vector3().subVectors(pA, pB);
+      const faceNormalVec3 = cb.cross(ab).normalize();
+      const normalArr = faceNormalVec3.toArray();
 
-      // Calculate normal for this triangle (flat shading)
-      // For smooth shading, normals would need to be averaged at vertices.
-      // JSCAD polygons should have a plane, from which we can get a normal.
-      // However, toPolygons might not directly give per-polygon normal in a way Three.js expects per-vertex.
-      // Let's try to use the plane normal if available, or calculate.
-      let normal: vec3;
-      if (polygon.plane) { // poly3 may not have a plane property directly, depends on internal structure.
-                           // geom3.toPolygons returns an array of polygons, each polygon is an array of vertices.
-                           // The normal is typically associated with the plane of the polygon.
-                           // Let's assume for now the polygons from toPolygons are simple arrays of vertices.
-                           // We might need to access normals differently if JSCAD stores them per polygon.
-        // For now, calculate face normal.
-        const pA = new THREE.Vector3().fromArray(v0);
-        const pB = new THREE.Vector3().fromArray(v1);
-        const pC = new THREE.Vector3().fromArray(v2);
-        const cb = new THREE.Vector3().subVectors(pC, pB);
-        const ab = new THREE.Vector3().subVectors(pA, pB);
-        const faceNormal = cb.cross(ab).normalize();
-        normal = faceNormal.toArray() as vec3;
+      v.forEach(vertexVec3 => { // vertexVec3 is [x,y,z]
+        positions.push(...vertexVec3);
+        normals.push(...normalArr);
 
-      } else { // Fallback if no plane normal easily accessible
-        const pA = new THREE.Vector3().fromArray(v0);
-        const pB = new THREE.Vector3().fromArray(v1);
-        const pC = new THREE.Vector3().fromArray(v2);
-        const cb = new THREE.Vector3().subVectors(pC, pB);
-        const ab = new THREE.Vector3().subVectors(pA, pB);
-        const faceNormal = cb.cross(ab).normalize();
-        normal = faceNormal.toArray() as vec3;
-      }
+        // Box Projection UVs
+        const relX = geomSize[0] === 0 ? 0.5 : (vertexVec3[0] - minBound[0]) / geomSize[0];
+        const relY = geomSize[1] === 0 ? 0.5 : (vertexVec3[1] - minBound[1]) / geomSize[1];
+        const relZ = geomSize[2] === 0 ? 0.5 : (vertexVec3[2] - minBound[2]) / geomSize[2];
 
-      normals.push(...normal, ...normal, ...normal); // Apply same normal to all 3 vertices of the triangle
+        const absNormalX = Math.abs(faceNormalVec3.x);
+        const absNormalY = Math.abs(faceNormalVec3.y);
+        const absNormalZ = Math.abs(faceNormalVec3.z);
 
-      // Basic/Placeholder UVs (e.g., using X/Y of vertices, not generally correct)
-      // This is highly dependent on the geometry and desired mapping.
-      // For a cuboid, one could map each face appropriately.
-      // For complex CSG results, UVs are very hard.
-      uvs.push(v0[0], v0[1]); // U = x, V = y (example)
-      uvs.push(v1[0], v1[1]);
-      uvs.push(v2[0], v2[1]);
+        if (absNormalX > absNormalY && absNormalX > absNormalZ) { // Dominant X-axis normal (side faces)
+          uvs.push(relY, 1.0 - relZ); // or (relZ, relY) depending on desired orientation
+        } else if (absNormalY > absNormalX && absNormalY > absNormalZ) { // Dominant Y-axis normal (top/bottom faces)
+          uvs.push(relX, 1.0 - relZ); // or (relX, relZ)
+        } else { // Dominant Z-axis normal (front/back faces)
+          uvs.push(relX, 1.0 - relY); // or (relX, relY)
+        }
+      });
     });
   });
 
-  threeGeometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-  threeGeometry.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
-  threeGeometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
-
-  // threeGeometry.computeVertexNormals(); // Alternative if per-vertex normals are desired and faces are correctly defined
-                                        // But our manual calculation above is for flat shading.
-                                        // If JSCAD provides reliable per-polygon normals, using those would be better.
+  if (positions.length > 0) {
+    threeGeometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    threeGeometry.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
+    threeGeometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+  }
   return threeGeometry;
 };

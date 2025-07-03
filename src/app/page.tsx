@@ -66,6 +66,8 @@ export default function HomePage() {
   const [currentWorkOrder, setCurrentWorkOrder] = useState<WorkOrderData | null>(null);
   const [userWorkOrders, setUserWorkOrders] = useState<WorkOrderData[]>([]);
   const [isLoadingWOList, setIsLoadingWOList] = useState(false);
+  const [isSavingWO, setIsSavingWO] = useState(false);
+  const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
   const [workOrderFormKey, setWorkOrderFormKey] = useState(Date.now());
 
   const [selectedPalletForInfo, setSelectedPalletForInfo] = useState<PalletType | null>(
@@ -149,18 +151,21 @@ export default function HomePage() {
 
   const handleSaveWorkOrder = async (workOrderDataFromForm: WorkOrderData) => {
     if (!currentUser) { alert("Please sign in."); return; }
-    const componentsWithLatestActiveProcessing = workOrderDataFromForm.components.map(comp =>
-      comp.id === activeVisualizedComponent?.id ?
-      { ...activeVisualizedComponent, edgeProcessingConfig, faceProcessingConfig } : comp
-    );
-    const isUpdating = currentWorkOrder && currentWorkOrder.id && !currentWorkOrder.id.startsWith('wo_');
-    const workOrderToSave: WorkOrderData = {
-      ...workOrderDataFromForm,
-      id: isUpdating ? currentWorkOrder.id : `wo_${Date.now()}`,
-      components: componentsWithLatestActiveProcessing,
-    };
+    if (isSavingWO) return;
 
+    setIsSavingWO(true);
     try {
+      const componentsWithLatestActiveProcessing = workOrderDataFromForm.components.map(comp =>
+        comp.id === activeVisualizedComponent?.id ?
+        { ...activeVisualizedComponent, edgeProcessingConfig, faceProcessingConfig } : comp
+      );
+      const isUpdating = currentWorkOrder && currentWorkOrder.id && !currentWorkOrder.id.startsWith('wo_');
+      const workOrderToSave: WorkOrderData = {
+        ...workOrderDataFromForm,
+        id: isUpdating ? currentWorkOrder.id : `wo_${Date.now()}`,
+        components: componentsWithLatestActiveProcessing,
+      };
+
       if (isUpdating) {
         const { id, userId, createdAt, ...updateData } = workOrderToSave;
         await updateWorkOrderInFirestore(workOrderToSave.id, updateData);
@@ -178,6 +183,8 @@ export default function HomePage() {
     } catch (error) {
       console.error("Error saving work order to Firestore:", error);
       alert("Failed to save work order.");
+    } finally {
+      setIsSavingWO(false);
     }
   };
 
@@ -209,7 +216,51 @@ export default function HomePage() {
 
   const calculatedCosts = useMemo(() => { /* ... */ return { material: 0, edge: 0, face: 0, total: 0 };}, [activeVisualizedComponent, edgeProcessingConfig, faceProcessingConfig]);
   const logisticsInfoDisplay = useMemo(() => { /* ... */ return { weight: "N/A", fits: "N/A", palletLoad: "N/A", notes: "" };}, [activeVisualizedComponent, selectedPalletForInfo, currentWorkOrder]);
-  const generatePdfReport = async () => { /* ... as before ... */ };
+
+  const generatePdfReport = async () => {
+    if (!currentWorkOrder) { alert("Please 'Save Work Order' first..."); return; }
+    if (!currentUser) { alert("Please sign in to download reports."); return; }
+    if (isGeneratingPDF) return;
+
+    setIsGeneratingPDF(true);
+    try {
+      const pdfDoc = await PDFDocument.create();
+      let page = pdfDoc.addPage([595, 842]);
+      const { width: pageWidth, height: pageHeight } = page.getSize();
+      const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+      const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+      let y = pageHeight - 40;
+      const line = (text: string, size = 10, isBold = false, indent = 0) => {
+        if (y < 40) { page = pdfDoc.addPage([595, 842]); y = pageHeight - 40; }
+        page.drawText(text, { x: 50 + indent, y, size, font: isBold ? boldFont : font, color: rgb(0,0,0) });
+        y -= (size * 1.4);
+      };
+      line(`Radni Nalog: ${currentWorkOrder.projectName}`, 14, true); y -= 5;
+      line(`Klijent: ${currentWorkOrder.clientName}`, 11);
+      line(`Datum: ${new Date(currentWorkOrder.date).toLocaleDateString('hr-HR')}`, 11);
+      line(`Odgovorna Osoba: ${currentWorkOrder.responsiblePerson || 'N/A'}`, 11);
+      line(`Izdao: ${currentUser.displayName || currentUser.email}`, 9); y -= 10;
+      let overallTotalCost = 0;
+      currentWorkOrder.components.forEach((comp, index) => { /* ... PDF component details ... */ });
+      y -= 10;
+      line("Logistika i Pakovanje:", 12, true);
+      const selectedPallet = samplePalletTypes.find(p => p.id === currentWorkOrder?.logistics.selectedPalletId);
+      line(`  Odabrana Paleta: ${selectedPallet?.name || "Nije odabrana"}`, 10, false, 10);
+      line(`  Napomene za Pakovanje: ${currentWorkOrder?.logistics.packingNotes || "Nema napomena."}`, 10, false, 10); y -= 10;
+      line(`UKUPNI TROŠAK RADNOG NALOGA: ${overallTotalCost.toFixed(2)} €`, 14, true); // overallTotalCost needs to be properly calculated for all components
+      const pdfBytes = await pdfDoc.save();
+      const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = `RadniNalog_${currentWorkOrder.projectName.replace(/\s+/g, '_') || 'izvjestaj'}.pdf`;
+      link.click(); URL.revokeObjectURL(link.href);
+    } catch (error) {
+        console.error("Error generating PDF:", error);
+        alert("Failed to generate PDF report.");
+    } finally {
+        setIsGeneratingPDF(false);
+    }
+  };
 
 
   return (
@@ -228,9 +279,13 @@ export default function HomePage() {
                 <button onClick={signOutUser} className="px-3 py-1.5 bg-red-500 text-white text-xs rounded hover:bg-red-600">Sign Out</button>
               </>
             ) : ( <button onClick={signInWithGoogle} className="px-3 py-1.5 bg-blue-500 text-white text-xs rounded hover:bg-blue-600">Sign In</button> )}
-            <button onClick={generatePdfReport} disabled={!currentWorkOrder || !currentUser} title={!currentUser ? "Sign in" : (!currentWorkOrder ? "Save WO first" : "PDF Report")}
-              className="px-4 py-2 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed">
-              PDF Report
+            <button
+              onClick={generatePdfReport}
+              disabled={!currentWorkOrder || !currentUser || isGeneratingPDF }
+              title={!currentUser ? "Please sign in" : (!currentWorkOrder ? "Please save work order first" : "Download PDF Report")}
+              className="px-4 py-2 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
+            >
+              {isGeneratingPDF ? "Generating..." : "PDF Report"}
             </button>
           </div>
         </header>
@@ -250,6 +305,7 @@ export default function HomePage() {
               activeComponentEdgeProcessing={edgeProcessingConfig}
               activeComponentFaceProcessing={faceProcessingConfig}
               onActiveComponentProcessingUpdate={handleActiveComponentProcessingUpdate}
+              isSaving={isSavingWO} {/* Pass saving state to form */}
             />
              <section className="mt-4 p-3 bg-white dark:bg-gray-800 rounded-lg shadow">
               <h2 className="text-lg font-semibold mb-2 text-gray-700 dark:text-gray-200">Cost Estimation (Active Comp. €)</h2>
