@@ -1,0 +1,508 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Reset and base styles */
+:root {
+  /* Colors */
+  --color-background: rgba(252, 252, 249, 1); /* bg-background */
+  --color-surface: rgba(255, 255, 253, 1); /* bg-surface */
+  --color-text: rgba(19, 52, 59, 1); /* text-text */
+  --color-text-secondary: rgba(98, 108, 113, 1); /* text-text-secondary */
+  --color-primary: rgba(33, 128, 141, 1); /* primary */
+  --color-primary-hover: rgba(29, 116, 128, 1); /* primary-hover */
+  --color-primary-active: rgba(26, 104, 115, 1); /* primary-active */
+  --color-secondary: rgba(94, 82, 64, 0.12); /* secondary - used for backgrounds */
+  --color-secondary-hover: rgba(94, 82, 64, 0.2); /* secondary-hover */
+  --color-secondary-active: rgba(94, 82, 64, 0.25); /* secondary-active */
+  --color-border: rgba(94, 82, 64, 0.2); /* border-border */
+  --color-btn-primary-text: rgba(252, 252, 249, 1); /* text-btn-primary-text */
+  --color-card-border: rgba(94, 82, 64, 0.12); /* border-card-border */
+  --color-card-border-inner: rgba(94, 82, 64, 0.12); /* border-card-border-inner */
+  --color-error: rgba(192, 21, 47, 1); /* error */
+  --color-error-rgb: 192, 21, 47;
+  --color-success: rgba(33, 128, 141, 1); /* success */
+  --color-success-rgb: 33, 128, 141;
+  --color-warning: rgba(168, 75, 47, 1); /* warning */
+  --color-warning-rgb: 168, 75, 47;
+  --color-info: rgba(98, 108, 113, 1); /* info */
+  --color-info-rgb: 98, 108, 113;
+  --color-focus-ring: rgba(33, 128, 141, 0.4); /* focus-ring */
+  --color-select-caret: rgba(19, 52, 59, 0.8);
+
+
+  /* Common style patterns */
+  --focus-ring-box-shadow: 0 0 0 3px var(--color-focus-ring);
+  --focus-outline-style: 2px solid var(--color-primary);
+  --status-bg-opacity: 0.15;
+  --status-border-opacity: 0.25;
+  --select-caret-light: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2313343B' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+  --select-caret-dark: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23f5f5f5' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+
+
+  /* Typography */
+  --font-family-base: "FKGroteskNeue", "Geist", "Inter", -apple-system,
+    BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; /* font-base */
+  --font-family-mono: "Berkeley Mono", ui-monospace, SFMono-Regular, Menlo,
+    Monaco, Consolas, monospace; /* font-mono */
+  --font-size-xs: 11px; /* text-xs */
+  --font-size-sm: 12px; /* text-sm */
+  --font-size-base: 14px; /* text-base */
+  --font-size-md: 14px; /* text-md - same as base, can be adjusted if needed */
+  --font-size-lg: 16px; /* text-lg */
+  --font-size-xl: 18px; /* text-xl */
+  --font-size-2xl: 20px; /* text-2xl */
+  --font-size-3xl: 24px; /* text-3xl */
+  --font-size-4xl: 30px; /* text-4xl */
+  --font-weight-normal: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 550;
+  --font-weight-bold: 600;
+  --line-height-tight: 1.2;
+  --line-height-normal: 1.5;
+  --letter-spacing-tight: -0.01em;
+
+  /* Spacing */
+  --space-0: 0;
+  --space-1: 1px;
+  --space-2: 2px;
+  --space-4: 4px; /* p-4, gap-4 etc. */
+  --space-6: 6px;
+  --space-8: 8px; /* p-8, gap-8 etc. */
+  --space-10: 10px;
+  --space-12: 12px; /* p-12 */
+  --space-16: 16px; /* p-16, gap-16 etc. */
+  --space-20: 20px; /* p-20 */
+  --space-24: 24px; /* p-24, gap-24 etc. */
+  --space-32: 32px; /* p-32 */
+
+  /* Border Radius */
+  --radius-sm: 6px; /* rounded-sm */
+  --radius-base: 8px; /* rounded-base or rounded-md (Tailwind default for md) */
+  --radius-md: 10px; /* rounded-lg (Tailwind default for lg) */
+  --radius-lg: 12px; /* rounded-xl */
+  --radius-full: 9999px; /* rounded-full */
+
+  /* Shadows */
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.02);
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0, 0, 0, 0.02); /* shadow-sm */
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.04),
+    0 2px 4px -1px rgba(0, 0, 0, 0.02); /* shadow-md */
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.04),
+    0 4px 6px -2px rgba(0, 0, 0, 0.02); /* shadow-lg */
+  --shadow-inset-sm: inset 0 1px 0 rgba(255, 255, 255, 0.15),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.03);
+
+  /* Animation */
+  --duration-fast: 150ms;
+  --duration-normal: 250ms; /* duration-normal */
+  --ease-standard: cubic-bezier(0.16, 1, 0.3, 1); /* ease-standard */
+
+  /* Layout - These are for reference, Tailwind handles container queries differently */
+  --container-sm: 640px;
+  --container-md: 768px;
+  --container-lg: 1024px;
+  --container-xl: 1280px;
+}
+
+/* Dark mode colors */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-background: rgba(31, 33, 33, 1);
+    --color-surface: rgba(38, 40, 40, 1);
+    --color-text: rgba(245, 245, 245, 1);
+    --color-text-secondary: rgba(167, 169, 169, 0.7);
+    --color-primary: rgba(50, 184, 198, 1);
+    --color-primary-hover: rgba(45, 166, 178, 1);
+    --color-primary-active: rgba(41, 150, 161, 1);
+    --color-secondary: rgba(119, 124, 124, 0.15);
+    --color-secondary-hover: rgba(119, 124, 124, 0.25);
+    --color-secondary-active: rgba(119, 124, 124, 0.3);
+    --color-border: rgba(119, 124, 124, 0.3);
+    --color-error: rgba(255, 84, 89, 1);
+    --color-error-rgb: 255, 84, 89;
+    --color-success: rgba(50, 184, 198, 1);
+    --color-success-rgb: 50, 184, 198;
+    --color-warning: rgba(230, 129, 97, 1);
+    --color-warning-rgb: 230, 129, 97;
+    --color-info: rgba(167, 169, 169, 1);
+    --color-info-rgb: 167, 169, 169;
+    --color-focus-ring: rgba(50, 184, 198, 0.4);
+    --color-btn-primary-text: rgba(19, 52, 59, 1); /* Dark mode primary button text */
+    --color-card-border: rgba(119, 124, 124, 0.2);
+    --color-card-border-inner: rgba(119, 124, 124, 0.15);
+    --shadow-inset-sm: inset 0 1px 0 rgba(255, 255, 255, 0.1),
+      inset 0 -1px 0 rgba(0, 0, 0, 0.15);
+    --color-select-caret: rgba(245, 245, 245, 0.8);
+  }
+}
+
+/* Data attribute for manual theme switching */
+[data-color-scheme="dark"] {
+  --color-background: rgba(31, 33, 33, 1);
+  --color-surface: rgba(38, 40, 40, 1);
+  --color-text: rgba(245, 245, 245, 1);
+  --color-text-secondary: rgba(167, 169, 169, 0.7);
+  --color-primary: rgba(50, 184, 198, 1);
+  --color-primary-hover: rgba(45, 166, 178, 1);
+  --color-primary-active: rgba(41, 150, 161, 1);
+  --color-secondary: rgba(119, 124, 124, 0.15);
+  --color-secondary-hover: rgba(119, 124, 124, 0.25);
+  --color-secondary-active: rgba(119, 124, 124, 0.3);
+  --color-border: rgba(119, 124, 124, 0.3);
+  --color-error: rgba(255, 84, 89, 1);
+  --color-error-rgb: 255, 84, 89;
+  --color-success: rgba(50, 184, 198, 1);
+  --color-success-rgb: 50, 184, 198;
+  --color-warning: rgba(230, 129, 97, 1);
+  --color-warning-rgb: 230, 129, 97;
+  --color-info: rgba(167, 169, 169, 1);
+  --color-info-rgb: 167, 169, 169;
+  --color-focus-ring: rgba(50, 184, 198, 0.4);
+  --color-btn-primary-text: rgba(19, 52, 59, 1);
+  --color-card-border: rgba(119, 124, 124, 0.15);
+  --color-card-border-inner: rgba(119, 124, 124, 0.15);
+  --shadow-inset-sm: inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.15);
+  --color-select-caret: rgba(245, 245, 245, 0.8);
+}
+
+[data-color-scheme="light"] {
+  --color-background: rgba(252, 252, 249, 1);
+  --color-surface: rgba(255, 255, 253, 1);
+  --color-text: rgba(19, 52, 59, 1);
+  --color-text-secondary: rgba(98, 108, 113, 1);
+  --color-primary: rgba(33, 128, 141, 1);
+  --color-primary-hover: rgba(29, 116, 128, 1);
+  --color-primary-active: rgba(26, 104, 115, 1);
+  --color-secondary: rgba(94, 82, 64, 0.12);
+  --color-secondary-hover: rgba(94, 82, 64, 0.2);
+  --color-secondary-active: rgba(94, 82, 64, 0.25);
+  --color-border: rgba(94, 82, 64, 0.2);
+  --color-btn-primary-text: rgba(252, 252, 249, 1);
+  --color-card-border: rgba(94, 82, 64, 0.12);
+  --color-card-border-inner: rgba(94, 82, 64, 0.12);
+  --color-error: rgba(192, 21, 47, 1);
+  --color-error-rgb: 192, 21, 47;
+  --color-success: rgba(33, 128, 141, 1);
+  --color-success-rgb: 33, 128, 141;
+  --color-warning: rgba(168, 75, 47, 1);
+  --color-warning-rgb: 168, 75, 47;
+  --color-info: rgba(98, 108, 113, 1);
+  --color-info-rgb: 98, 108, 113;
+  --color-focus-ring: rgba(33, 128, 141, 0.4);
+  --color-select-caret: rgba(19, 52, 59, 0.8);
+}
+
+/* Base styles */
+html {
+  font-size: var(--font-size-base);
+  font-family: var(--font-family-base);
+  line-height: var(--line-height-normal);
+  color: var(--color-text);
+  background-color: var(--color-background);
+  -webkit-font-smoothing: antialiased;
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+#root {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: inherit;
+}
+
+/* Typography */
+h1, h2, h3, h4, h5, h6 {
+  margin: 0;
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-tight);
+  color: var(--color-text); /* Ensure headers use text color by default */
+  letter-spacing: var(--letter-spacing-tight);
+}
+
+h1 { font-size: var(--font-size-4xl); }
+h2 { font-size: var(--font-size-3xl); }
+h3 { font-size: var(--font-size-2xl); } /* Adjusted to match example, was text-lg in component */
+h4 { font-size: var(--font-size-xl); }
+h5 { font-size: var(--font-size-lg); } /* Adjusted to match example, was text-base in component */
+h6 { font-size: var(--font-size-md); }
+
+
+p {
+  margin: 0 0 var(--space-16) 0;
+}
+
+a {
+  color: var(--color-primary);
+  text-decoration: none;
+  transition: color var(--duration-fast) var(--ease-standard);
+}
+a:hover { color: var(--color-primary-hover); }
+
+
+/* Buttons - using Tailwind classes primarily, but some base styles might be useful */
+.btn {
+  /* Tailwind: inline-flex items-center justify-center px-16 py-8 rounded-base text-base font-medium cursor-pointer transition-all duration-normal ease-standard border-none */
+  /* Default button text color should be based on its background */
+}
+.btn:focus-visible { /* Tailwind: focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary */
+  outline: none;
+  box-shadow: var(--focus-ring-box-shadow);
+}
+.btn--primary { /* Tailwind: bg-primary text-btn-primary-text hover:bg-primary-hover active:bg-primary-active */ }
+.btn--secondary { /* Tailwind: bg-secondary text-text hover:bg-secondary-hover active:bg-secondary-active */ }
+.btn--outline { /* Tailwind: bg-transparent border border-border text-text hover:bg-secondary */ }
+/* Dark mode outline button */
+[data-color-scheme="dark"] .btn--outline,
+:root:not([data-color-scheme="light"]) .btn--outline { /* Applies if dark mode via prefers-color-scheme and no explicit light scheme */
+    border-color: rgba(119, 124, 124, 0.3); /* var(--color-border) in dark mode */
+}
+[data-color-scheme="dark"] .btn--outline:hover,
+:root:not([data-color-scheme="light"]) .btn--outline:hover {
+    background-color: rgba(119, 124, 124, 0.25); /* var(--color-secondary-hover) in dark mode */
+}
+
+
+/* Form elements */
+.form-control {
+  /* Tailwind: block w-full py-8 px-12 text-md leading-normal text-text bg-surface border border-border rounded-base transition-all duration-fast ease-standard */
+}
+select.form-control {
+  /* Tailwind: appearance-none pr-32 (padding-right for arrow) */
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  background-image: var(--select-caret-light);
+  background-repeat: no-repeat;
+  background-position: right var(--space-12) center;
+  background-size: 16px;
+  padding-right: var(--space-32); /* Ensure padding for the arrow */
+}
+
+@media (prefers-color-scheme: dark) {
+  select.form-control {
+    background-image: var(--select-caret-dark);
+  }
+}
+[data-color-scheme="dark"] select.form-control {
+  background-image: var(--select-caret-dark);
+}
+[data-color-scheme="light"] select.form-control {
+  background-image: var(--select-caret-light);
+}
+
+.form-control:focus { /* Tailwind: focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary */
+  border-color: var(--color-primary);
+  outline: var(--focus-outline-style); /* Updated to use the variable */
+  outline-offset: 0; /* Tailwind's focus ring is typically an outline */
+  box-shadow: none; /* Remove default browser focus shadow if outline is used */
+}
+
+
+/* Card component - mostly handled by Tailwind */
+.card { /* Tailwind: bg-surface rounded-lg border border-card-border shadow-sm overflow-hidden transition-shadow duration-normal ease-standard hover:shadow-md */
+}
+
+/* Status indicators */
+.status {
+  /* Tailwind: inline-flex items-center py-6 px-12 rounded-full font-medium text-sm */
+}
+.status--success {
+  background-color: rgba(var(--color-success-rgb), var(--status-bg-opacity));
+  color: var(--color-success);
+  border: 1px solid rgba(var(--color-success-rgb), var(--status-border-opacity));
+}
+.status--error {
+  background-color: rgba(var(--color-error-rgb), var(--status-bg-opacity));
+  color: var(--color-error);
+  border: 1px solid rgba(var(--color-error-rgb), var(--status-border-opacity));
+}
+.status--warning {
+  background-color: rgba(var(--color-warning-rgb), var(--status-bg-opacity));
+  color: var(--color-warning);
+  border: 1px solid rgba(var(--color-warning-rgb), var(--status-border-opacity));
+}
+.status--info {
+  background-color: rgba(var(--color-info-rgb), var(--status-bg-opacity));
+  color: var(--color-info);
+  border: 1px solid rgba(var(--color-info-rgb), var(--status-border-opacity));
+}
+
+
+/* App-specific styles that might not be fully covered by Tailwind or need overrides */
+.app-container { /* Tailwind: min-h-screen flex flex-col bg-background text-text font-base */ }
+.app-header { /* Tailwind: bg-surface border-b border-border shadow-sm sticky top-0 z-[100] */ }
+.header-content { /* Tailwind: container flex items-center justify-between py-16 (max-w-screen-xl mx-auto px-4 sm:px-6 lg:px-8 for container) */ }
+/* .container class is defined by Tailwind, ensure it's used in JSX for max-width and padding */
+
+.logo h1 { /* Tailwind: text-primary text-2xl font-bold m-0 */ }
+.main-nav { /* Tailwind: flex gap-8 */ }
+.nav-btn { /* Tailwind: bg-none border-none py-8 px-16 rounded-base text-md font-medium text-text-secondary cursor-pointer transition-all duration-normal ease-standard hover:bg-secondary hover:text-text */ }
+.nav-btn--active { /* Tailwind: bg-primary text-btn-primary-text hover:bg-primary-hover */ }
+
+.app-main { /* Tailwind: flex-1 py-24 */ }
+.workspace { /* Tailwind: grid grid-cols-[320px_1fr_300px] gap-24 min-h-[800px] lg:grid-cols-[280px_1fr_280px] lg:gap-16 md:grid-cols-1 md:gap-16 */ }
+
+.left-panel { /* Tailwind: bg-surface rounded-lg border border-card-border p-20 overflow-y-auto max-h-screen md:order-1 md:p-16 sm:p-12 */ }
+.config-section h3 { /* Tailwind: text-text text-lg font-semibold mb-16 border-b-2 border-primary pb-8 */ }
+/* Note: The component used text-2xl for h3, but the CSS example implies text-lg. Adjusted root h3 to text-2xl, use specific text-lg on elements if needed. */
+
+
+.project-type-btn { /* Tailwind: bg-surface border border-border rounded-base p-12 cursor-pointer transition-all duration-normal ease-standard text-center flex flex-col items-center gap-4 hover:bg-secondary hover:border-primary */ }
+.project-type-btn--active { /* Tailwind: bg-primary text-btn-primary-text border-primary */ }
+.project-type-btn .icon { /* Tailwind: text-2xl */ }
+.project-type-btn .text { /* Tailwind: text-sm font-medium */ }
+
+.material-card { /* Tailwind: bg-surface border border-border rounded-base p-8 cursor-pointer transition-all duration-normal ease-standard hover:border-primary hover:shadow-md */ }
+.material-card--active { /* Tailwind: border-primary shadow-md bg-primary text-btn-primary-text */ }
+.material-preview { /* Tailwind: w-full h-[40px] rounded-sm border border-border mb-8 */ }
+.material-info h4 { /* Tailwind: text-sm font-semibold m-0 mb-2 */ }
+.material-info p { /* Tailwind: text-xs text-text-secondary m-0 */ }
+.material-card--active .material-info p { /* Tailwind: text-btn-primary-text opacity-90 */ }
+
+
+.dimension-slider {
+  /* Tailwind: w-full h-[6px] bg-secondary rounded-sm outline-none cursor-pointer appearance-none */
+  -webkit-appearance: none;
+  appearance: none;
+}
+.dimension-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 20px; /* thumb-w-20 - custom utility or inline style */
+  height: 20px; /* thumb-h-20 */
+  background: var(--color-primary); /* thumb-bg-primary */
+  border-radius: var(--radius-full); /* thumb-rounded-full */
+  cursor: pointer;
+  transition: all var(--duration-fast) var(--ease-standard); /* transition-all duration-fast ease-standard */
+}
+.dimension-slider::-webkit-slider-thumb:hover {
+  background: var(--color-primary-hover); /* hover:thumb-bg-primary-hover */
+  transform: scale(1.1); /* hover:scale-110 */
+}
+.dimension-slider::-moz-range-thumb { /* Firefox */
+  width: 20px;
+  height: 20px;
+  background: var(--color-primary);
+  border-radius: var(--radius-full);
+  cursor: pointer;
+  border: none;
+  transition: all var(--duration-fast) var(--ease-standard);
+}
+.dimension-slider::-moz-range-thumb:hover {
+  background: var(--color-primary-hover);
+  transform: scale(1.1);
+}
+
+
+.viewer-header h3, .drawing-header h3 { /* Tailwind: text-text text-lg font-semibold m-0 */ }
+.view-btn { /* Tailwind: bg-none border border-border py-4 px-8 rounded-sm text-sm text-text cursor-pointer transition-all duration-normal ease-standard hover:bg-secondary hover:border-primary */ }
+.view-btn--active { /* Tailwind: bg-primary text-btn-primary-text border-primary */ }
+
+.viewer { /* Tailwind: relative h-[400px] flex items-center justify-center bg-gradient-to-br from-gray-100 to-gray-200 sm:h-[300px] */ }
+/* For gradient, Tailwind: from-gray-100 to-gray-200. If specific colors: from-[hex] to-[hex] */
+.drawing-viewer { /* Tailwind: h-[300px] flex items-center justify-center bg-surface sm:h-[200px] */ }
+
+#canvas3D, #canvas2D { /* Tailwind: border border-border rounded-base bg-white shadow-lg */ }
+/* Responsive canvas sizes are handled by classes in JSX sm:w-full sm:max-w-[400px] sm:h-[250px] etc. */
+
+.viewer-overlay { /* Tailwind: absolute top-16 left-16 bg-black bg-opacity-80 text-white py-8 px-12 rounded-base text-sm font-medium */ }
+
+.calc-section h3 { /* Tailwind: text-text text-lg font-semibold m-0 mb-12 border-b-2 border-primary pb-8 */ }
+.property-item, .calc-item, .cost-item { /* Tailwind: flex justify-between items-center py-6 px-6 bg-secondary rounded-sm */ }
+.property-label, .calc-label, .cost-label { /* Tailwind: text-sm text-text-secondary font-medium */ }
+.property-value, .calc-value, .cost-value { /* Tailwind: text-sm text-text font-semibold */ }
+
+.cost-total { /* Tailwind: flex justify-between items-center bg-primary text-btn-primary-text font-bold mt-8 p-10 rounded-sm */ }
+.cost-total .cost-label, .cost-total .cost-value { /* Tailwind: text-btn-primary-text text-md */ }
+
+.material-description { /* Tailwind: mt-12 p-8 bg-secondary rounded-sm border-l-4 border-primary */ }
+.material-description p { /* Tailwind: text-sm text-text-secondary m-0 leading-normal */ }
+
+
+/* Custom scrollbar for left-panel */
+.left-panel::-webkit-scrollbar {
+  width: 6px;
+}
+.left-panel::-webkit-scrollbar-track {
+  background: var(--color-secondary);
+  border-radius: var(--radius-sm);
+}
+.left-panel::-webkit-scrollbar-thumb {
+  background: var(--color-primary);
+  border-radius: var(--radius-sm);
+}
+.left-panel::-webkit-scrollbar-thumb:hover {
+  background: var(--color-primary-hover);
+}
+
+/* Ensure body takes full height for sticky footer if needed, and app container fills it */
+/* html, body, #root, .app-container {
+  height: 100%;
+}
+.app-container {
+  display: flex;
+  flex-direction: column;
+}
+.app-main {
+  flex-grow: 1;
+} */
+/* The above is good for sticky footers, but check if it conflicts with current layout's min-height on workspace */
+
+
+@font-face {
+  font-family: 'FKGroteskNeue';
+  src: url('https://r2cdn.perplexity.ai/fonts/FKGroteskNeue.woff2')
+    format('woff2');
+  font-display: swap; /* Improves font loading performance */
+}
+
+@font-face {
+  font-family: 'Berkeley Mono';
+  src: url('https://r2cdn.perplexity.ai/fonts/BerkeleyMono-Regular.woff2')
+    format('woff2');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* Status indicator styles - these combine background, text, and border colors based on type */
+/* These classes are intended to be used alongside the base 'status' class */
+
+.status--success {
+  background-color: rgba(var(--color-success-rgb), var(--status-bg-opacity)) !important; /* Use !important if Tailwind utilities override */
+  color: var(--color-success) !important;
+  border: 1px solid rgba(var(--color-success-rgb), var(--status-border-opacity)) !important;
+}
+
+.status--error {
+  background-color: rgba(var(--color-error-rgb), var(--status-bg-opacity)) !important;
+  color: var(--color-error) !important;
+  border: 1px solid rgba(var(--color-error-rgb), var(--status-border-opacity)) !important;
+}
+
+.status--warning { /* Added warning as it was in the initial CSS variables */
+  background-color: rgba(var(--color-warning-rgb), var(--status-bg-opacity)) !important;
+  color: var(--color-warning) !important;
+  border: 1px solid rgba(var(--color-warning-rgb), var(--status-border-opacity)) !important;
+}
+
+.status--info {
+  background-color: rgba(var(--color-info-rgb), var(--status-bg-opacity)) !important;
+  color: var(--color-info) !important;
+  border: 1px solid rgba(var(--color-info-rgb), var(--status-border-opacity)) !important;
+}
